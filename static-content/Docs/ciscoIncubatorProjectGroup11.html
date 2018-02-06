@@ -1,0 +1,138 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html><head><title>Python: module ciscoIncubatorProjectGroup11</title>
+<meta charset="utf-8">
+</head><body bgcolor="#f0f0f8">
+
+<table width="100%" cellspacing=0 cellpadding=2 border=0 summary="heading">
+<tr bgcolor="#7799ee">
+<td valign=bottom>&nbsp;<br>
+<font color="#ffffff" face="helvetica, arial">&nbsp;<br><big><big><strong>ciscoIncubatorProjectGroup11</strong></big></big></font></td
+><td align=right valign=bottom
+><font color="#ffffff" face="helvetica, arial"><a href="../../../../">index</a><br><a href="https://raw.githubusercontent.com/MagdaRyb/Python-project/Initial-Commit/ciscoIncubatorProjectGroup11.py">ciscoIncubatorProjectGroup11.py</a></font></td></tr></table>
+    <p><tt>Network&nbsp;Explorer&nbsp;Module<br>
+&nbsp;<br>
+Developed&nbsp;in&nbsp;fulfillment&nbsp;of&nbsp;the&nbsp;requirement&nbsp;defined&nbsp;on<br>
+https://ciscosales.instructure.com/courses/56/assignments/3313?module_item_id=4765,&nbsp;the&nbsp;present&nbsp;module&nbsp;retrieves<br>
+information&nbsp;about&nbsp;network&nbsp;given&nbsp;the&nbsp;range&nbsp;of&nbsp;devices&nbsp;IPs&nbsp;and&nbsp;the&nbsp;password&nbsp;(communityString)&nbsp;for&nbsp;SNMP&nbsp;access.<br>
+&nbsp;<br>
+Examples:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;Running&nbsp;the&nbsp;module&nbsp;with&nbsp;default&nbsp;arguments:<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$&nbsp;python&nbsp;projectLauncher.py<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;or<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$&nbsp;python&nbsp;projectLauncher.py&nbsp;-f&nbsp;--range&nbsp;/file_location/range_filename&nbsp;--password&nbsp;/file_location/password_filename<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;or<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$&nbsp;python&nbsp;projectLauncher.py&nbsp;-f&nbsp;--range&nbsp;/file_location/range_filename<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Password(Input&nbsp;hidden):<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;or<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$&nbsp;python&nbsp;projectLauncher.py&nbsp;--range&nbsp;192.168.0.1#25&nbsp;-f&nbsp;--password&nbsp;/file_location/password_filename<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;or<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$&nbsp;&nbsp;python&nbsp;projectLauncher.py&nbsp;--range&nbsp;192.168.0.1#25<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Password(Input&nbsp;hidden):<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;or<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$&nbsp;python&nbsp;projectLauncher.py&nbsp;--range&nbsp;192.168.0.1#25&nbsp;--password&nbsp;public<br>
+&nbsp;<br>
+Attributes:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;devices_data&nbsp;([]str):&nbsp;list&nbsp;of&nbsp;all&nbsp;`reachable_ips`&nbsp;SNMP&nbsp;extracted&nbsp;data&nbsp;with&nbsp;respect&nbsp;to&nbsp;`oid_of_interests`<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and&nbsp;`password`<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;password&nbsp;(str):&nbsp;validated&nbsp;communityString&nbsp;for&nbsp;SNMP&nbsp;extraction&nbsp;from&nbsp;the&nbsp;list&nbsp;`passwords`&nbsp;or&nbsp;just&nbsp;the&nbsp;value<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;passed&nbsp;from&nbsp;the&nbsp;CLI<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;passwords&nbsp;(str):&nbsp;is&nbsp;a&nbsp;list&nbsp;of&nbsp;candidate&nbsp;strings&nbsp;used&nbsp;by&nbsp;SNMP&nbsp;as&nbsp;the&nbsp;communityString(name)&nbsp;to&nbsp;query&nbsp;managed&nbsp;devices.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(passed&nbsp;as&nbsp;on&nbsp;the&nbsp;examples&nbsp;above,&nbsp;thougth&nbsp;the&nbsp;command&nbsp;line,&nbsp;default&nbsp;ranges&nbsp;are&nbsp;given&nbsp;in&nbsp;the&nbsp;password.txt<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;file&nbsp;in&nbsp;the&nbsp;direction&nbsp;where&nbsp;the&nbsp;script&nbsp;is&nbsp;located).&nbsp;Once&nbsp;one&nbsp;string&nbsp;from&nbsp;the&nbsp;list&nbsp;is&nbsp;validated,&nbsp;it&nbsp;is&nbsp;set&nbsp;to<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;the&nbsp;`password`&nbsp;attribute.<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;oid_of_interests&nbsp;([]str):&nbsp;&nbsp;list&nbsp;of&nbsp;SNMP&nbsp;oid&nbsp;we&nbsp;would&nbsp;like&nbsp;to&nbsp;extract&nbsp;from&nbsp;devices&nbsp;in&nbsp;order&nbsp;to&nbsp;build&nbsp;the&nbsp;final&nbsp;report<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ranges&nbsp;(str):&nbsp;can&nbsp;be&nbsp;either&nbsp;an&nbsp;ip&nbsp;range&nbsp;&nbsp;or&nbsp;a&nbsp;list&nbsp;of&nbsp;ip&nbsp;ranges&nbsp;(passed&nbsp;as&nbsp;on&nbsp;the&nbsp;examples<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;above,&nbsp;thougth&nbsp;the&nbsp;command&nbsp;line,&nbsp;default&nbsp;ranges&nbsp;are&nbsp;given&nbsp;in&nbsp;the&nbsp;range.txt&nbsp;file&nbsp;in&nbsp;the&nbsp;direction&nbsp;where<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;the&nbsp;script&nbsp;is&nbsp;located).&nbsp;valid_range&nbsp;=&nbsp;valid_ip&nbsp;+&nbsp;"#"&nbsp;+&nbsp;x,&nbsp;0&lt;x&lt;255.&nbsp;(eg.&nbsp;192.168.0.1#52)<br>
+&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;reachable_ips&nbsp;([]str):&nbsp;list&nbsp;of&nbsp;all&nbsp;devices&nbsp;that&nbsp;are&nbsp;reachable&nbsp;thanks&nbsp;to&nbsp;IP&nbsp;ranges&nbsp;providen&nbsp;to&nbsp;the&nbsp;program</tt></p>
+<p>
+<table width="100%" cellspacing=0 cellpadding=2 border=0 summary="section">
+<tr bgcolor="#aa55cc">
+<td colspan=3 valign=bottom>&nbsp;<br>
+<font color="#ffffff" face="helvetica, arial"><big><strong>Modules</strong></big></font></td></tr>
+    
+<tr><td bgcolor="#aa55cc"><tt>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</tt></td><td>&nbsp;</td>
+<td width="100%"><table width="100%" summary="list"><tr><td width="25%" valign=top><a href="argparse.html">argparse</a><br>
+<a href="pysnmp.entity.rfc3413.oneliner.cmdgen.html">pysnmp.entity.rfc3413.oneliner.cmdgen</a><br>
+</td><td width="25%" valign=top><a href="getpass.html">getpass</a><br>
+<a href="networkx.html">networkx</a><br>
+</td><td width="25%" valign=top><a href="subprocess.html">subprocess</a><br>
+<a href="sys.html">sys</a><br>
+</td><td width="25%" valign=top></td></tr></table></td></tr></table><p>
+<table width="100%" cellspacing=0 cellpadding=2 border=0 summary="section">
+<tr bgcolor="#eeaa77">
+<td colspan=3 valign=bottom>&nbsp;<br>
+<font color="#ffffff" face="helvetica, arial"><big><strong>Functions</strong></big></font></td></tr>
+    
+<tr><td bgcolor="#eeaa77"><tt>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</tt></td><td>&nbsp;</td>
+<td width="100%"><dl><dt><a name="-check_iprange_and_retrieve_available_ips"><strong>check_iprange_and_retrieve_available_ips</strong></a>(list_of_ranges)</dt><dd><tt>Function&nbsp;to&nbsp;Check&nbsp;IP&nbsp;Ranges&nbsp;and&nbsp;Retrieve&nbsp;&nbsp;available&nbsp;IPs<br>
+&nbsp;<br>
+Checks&nbsp;for&nbsp;valid&nbsp;IP&nbsp;ranges&nbsp;in&nbsp;the&nbsp;given&nbsp;parameter&nbsp;and&nbsp;retrieves&nbsp;all&nbsp;the&nbsp;available&nbsp;IPs.<br>
+A&nbsp;valid&nbsp;range&nbsp;consists&nbsp;of&nbsp;a&nbsp;valid&nbsp;IP&nbsp;address&nbsp;excluding&nbsp;all&nbsp;reserved&nbsp;addresses,&nbsp;followed&nbsp;by&nbsp;a&nbsp;`#`<br>
+character&nbsp;and&nbsp;a&nbsp;number&nbsp;X&nbsp;so&nbsp;that&nbsp;the&nbsp;sum&nbsp;of&nbsp;the&nbsp;last&nbsp;byte&nbsp;of&nbsp;the&nbsp;IP&nbsp;in&nbsp;front&nbsp;and&nbsp;X&nbsp;is&nbsp;less&nbsp;than&nbsp;255<br>
+eg.&nbsp;10.45.24.3#23&nbsp;(means&nbsp;from&nbsp;10.45.24.3&nbsp;-&nbsp;10.45.24.26)<br>
+&nbsp;<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;list_of_ranges:&nbsp;List&nbsp;of&nbsp;all&nbsp;IP&nbsp;ranges&nbsp;Candidates</tt></dd></dl>
+ <dl><dt><a name="-check_snmp_support"><strong>check_snmp_support</strong></a>(ip_address, community_string, list_oid_of_interests)</dt><dd><tt>Function&nbsp;to&nbsp;check&nbsp;SNMP&nbsp;support<br>
+&nbsp;<br>
+Given&nbsp;an&nbsp;IP&nbsp;address&nbsp;and&nbsp;a&nbsp;community&nbsp;string,&nbsp;performs&nbsp;an&nbsp;snmp&nbsp;extract<br>
+&nbsp;<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ip_address&nbsp;(str):&nbsp;A&nbsp;valid&nbsp;ip&nbsp;address.&nbsp;eg.&nbsp;10.0.0.1<br>
+&nbsp;&nbsp;&nbsp;&nbsp;community_string&nbsp;(str):&nbsp;An&nbsp;SNMP&nbsp;communityString.&nbsp;Should&nbsp;match&nbsp;the&nbsp;remote&nbsp;host's&nbsp;settings<br>
+&nbsp;&nbsp;&nbsp;&nbsp;list_oid_of_interests&nbsp;([]str):&nbsp;List&nbsp;of&nbsp;all&nbsp;the&nbsp;OIDs&nbsp;for&nbsp;which&nbsp;one&nbsp;would&nbsp;like&nbsp;to&nbsp;extract&nbsp;data&nbsp;with&nbsp;SNMP<br>
+Returns:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Values&nbsp;from&nbsp;cmdgen.CommandGenerator().getCmd()&nbsp;of&nbsp;pysnmp&nbsp;module<br>
+Raises:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;NameError:&nbsp;Due&nbsp;to&nbsp;wrong&nbsp;module&nbsp;call/loading<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Exception:&nbsp;Any&nbsp;kind&nbsp;of&nbsp;exception&nbsp;due&nbsp;to&nbsp;pysnmp&nbsp;module&nbsp;usage</tt></dd></dl>
+ <dl><dt><a name="-list_reachable_ips"><strong>list_reachable_ips</strong></a>(start_ip_bytes, nbr_host)</dt><dd><tt>Function&nbsp;to&nbsp;list&nbsp;reachable&nbsp;IPs<br>
+&nbsp;<br>
+Returns&nbsp;all&nbsp;reachable&nbsp;IPs&nbsp;starting&nbsp;from&nbsp;the&nbsp;`start_ip`&nbsp;and&nbsp;incrementally&nbsp;with&nbsp;respect&nbsp;to&nbsp;`nbr_host`<br>
+&nbsp;<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;start_ip_bytes&nbsp;([]str)&nbsp;:&nbsp;the&nbsp;first&nbsp;IP&nbsp;address&nbsp;in&nbsp;the&nbsp;given&nbsp;range<br>
+&nbsp;&nbsp;&nbsp;&nbsp;nbr_host&nbsp;([]str):&nbsp;The&nbsp;number&nbsp;of&nbsp;hosts&nbsp;in&nbsp;the&nbsp;range<br>
+&nbsp;<br>
+Returns:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ip_list:&nbsp;The&nbsp;list&nbsp;of&nbsp;all&nbsp;reachable&nbsp;ips</tt></dd></dl>
+ <dl><dt><a name="-load_configuration"><strong>load_configuration</strong></a>()</dt><dd><tt>Loads&nbsp;ranges&nbsp;and&nbsp;passwords&nbsp;configurations&nbsp;as&nbsp;provided&nbsp;by&nbsp;the&nbsp;user&nbsp;using&nbsp;CLI&nbsp;flags&nbsp;or<br>
+tries&nbsp;to&nbsp;use&nbsp;the&nbsp;sample&nbsp;ones&nbsp;from&nbsp;the&nbsp;script&nbsp;directory<br>
+&nbsp;<br>
+Returns:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;return_passwords&nbsp;([]str):&nbsp;A&nbsp;list&nbsp;of&nbsp;candidate&nbsp;passwords&nbsp;from&nbsp;the&nbsp;user&nbsp;defined&nbsp;file<br>
+&nbsp;&nbsp;&nbsp;&nbsp;return_password&nbsp;(str):&nbsp;Is&nbsp;set&nbsp;in&nbsp;case&nbsp;the&nbsp;password&nbsp;was&nbsp;entered&nbsp;from&nbsp;the&nbsp;CLI<br>
+&nbsp;&nbsp;&nbsp;&nbsp;return_ranges&nbsp;([]str):&nbsp;A&nbsp;list&nbsp;of&nbsp;candidate&nbsp;network&nbsp;IP&nbsp;ranges&nbsp;form&nbsp;a&nbsp;user&nbsp;provided&nbsp;file</tt></dd></dl>
+</td></tr></table><p>
+<table width="100%" cellspacing=0 cellpadding=2 border=0 summary="section">
+<tr bgcolor="#55aa55">
+<td colspan=3 valign=bottom>&nbsp;<br>
+<font color="#ffffff" face="helvetica, arial"><big><strong>Data</strong></big></font></td></tr>
+    
+<tr><td bgcolor="#55aa55"><tt>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</tt></td><td>&nbsp;</td>
+<td width="100%"><strong>Fore</strong> = &lt;colorama.ansi.AnsiFore object&gt;<br>
+<strong>Style</strong> = &lt;colorama.ansi.AnsiStyle object&gt;<br>
+<strong>devices_data</strong> = []<br>
+<strong>oid_of_interests</strong> = ['.1.3.6.1.2.1.1', '1.3.6.1.4.1.9.2.1.3', '1.3.6.1.2.1.14.1.1', '1.3.6.1.2.1.14.10.1.1', '1.3.6.1.2.1.14.10.1.3', '1.3.6.1.2.1.14.10.1.2']<br>
+<strong>password</strong> = ''<br>
+<strong>passwords</strong> = []<br>
+<strong>ranges</strong> = []<br>
+<strong>reachable_ips</strong> = []</td></tr></table>
+</body></html>
