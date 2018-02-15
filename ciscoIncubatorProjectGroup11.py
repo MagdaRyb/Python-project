@@ -310,7 +310,6 @@ def devices_information(ip_addresses):
         for password in passwords:
             time.sleep(10)
             try:
-                print password
                 ssh_client.connect(ip,
                             username=username,
                             password=password)
