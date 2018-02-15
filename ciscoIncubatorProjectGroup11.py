@@ -58,6 +58,9 @@ try:
     import sys
     import argparse
     import getpass
+    import paramiko
+    import re
+    import time
     from colorama import init, deinit, Fore, Style
    # import matplotlib.pyplot as matp
     import networkx as nx
@@ -260,6 +263,106 @@ def load_configuration():
         print ioe
     return return_passwords, return_one_password,  return_ranges
 
+def devices_information(ip_addresses):
+    """
+    Function which extracts the information about devices provided in the ip_addresses list.
+    The provided information is as follows:
+    1. Managements ip address
+    2. Information about OS running on the device
+    3. Password
+    4. Hardware information
+    5. Modules avaliable on the device
+
+    Before using make sure that SSH is enabled on the device.
+    
+    :param ip_addresses: list of strings - ip addresses of the devices
+    :return: dictionary with information described above
+    """
+    devices = []
+    
+    username = 'admin'
+    password_filename = 'password.txt'
+    
+    # loading the list of possible passwords
+    password_file = open(password_filename, 'r')  
+    password_file.seek(0)
+    passwords = password_file.readlines()
+    passwords = [password.strip('\n') for password in passwords]
+    password_file.close()
+    
+    passwrd = ''
+    hardware_info = ''
+    modules= []
+    os_info = []
+    
+    for ip in ip_addresses:
+    
+        print '--- Attempting paramiko connection to: ', ip, ' ---'
+
+        # create paramiko session
+        ssh_client = paramiko.SSHClient()
+
+        # must set missing host key policy since we don't have the SSH key
+        # stored in the 'known_hosts' file
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        # searching for the right password
+        for password in passwords:
+            time.sleep(10)
+            try:
+                print password
+                ssh_client.connect(ip,
+                            username=username,
+                            password=password)
+                passwrd = password
+            except paramiko.ssh_exception.AuthenticationException:
+                continue
+            break
+    
+        print 'Success! connecting to: ', ip
+    
+        # retriving all desired information
+        stdin, stdout, ssh_stderr = ssh_client.exec_command('show hardware')
+        show_hardware = stdout.read()
+        
+        hardware_pattern = re.compile('.*(processor).*\(revision.*\)')
+        hardware_info = hardware_pattern.search(show_hardware).group(0)
+    
+        os_type_pattern = re.compile('.*(NX\-OS|IOS|IOS\-XR).*,.*,')
+        os_info = os_type_pattern.search(show_hardware).group(0)[:-1]
+    
+        ssh_client.connect(ip,
+                            username=username,
+                            password=passwrd)
+        stdin, stdout, ssh_stderr = ssh_client.exec_command('show inventory')
+        show_inventory = stdout.read()
+        show_inventory = show_inventory.split("\n\r")
+    
+        
+        inventory_pattern = re.compile('(NAME: \".*\",)')
+        for line in show_inventory:
+            try:
+                modules.append(inventory_pattern.search(line).group(0)[7:-2])
+            except:
+                pass
+            
+        print '------------------------------------------------------'
+        print ' Management ip address: ', ip
+        print '        OS information: ', os_info
+        print '              Password: ', passwrd
+        print '  Hardware information: ', hardware_info
+        print '   Modules information:'
+        for mod in modules:
+            print '                        ', mod
+        print '------------------------------------------------------\n'
+    
+        devices.append({'ip': ip,
+                        'os_info': os_info,
+                        'password': passwrd,
+                        'hardware_info': hardware_info,
+                        'modules_info': modules})
+        
+    return devices
 
 init()
 
