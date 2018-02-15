@@ -290,12 +290,11 @@ def devices_information(ip_addresses):
     passwords = [password.strip('\n') for password in passwords]
     password_file.close()
     
-    passwrd = ''
-    hardware_info = ''
-    modules= []
-    os_info = []
-    
     for ip in ip_addresses:
+        passwrd = ''
+        hardware_info = ''
+        modules= []
+        os_info = []
     
         print '--- Attempting paramiko connection to: ', ip, ' ---'
 
