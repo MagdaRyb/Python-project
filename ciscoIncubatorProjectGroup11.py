@@ -61,6 +61,7 @@ try:
     import paramiko
     import re
     import time
+    import json
     from colorama import init, deinit, Fore, Style
    # import matplotlib.pyplot as matp
     import networkx as nx
@@ -90,8 +91,8 @@ reachable_ips = []
 
 This list is made of IPs which responds to a ping request
 """
-devices_data = []
-"""[]str: container of all the OID data retrieved from SNMP 
+devices_data = {}
+"""[]str: Dictionary of all the data retrieved fo a specif device 
 
 """
 
@@ -263,104 +264,158 @@ def load_configuration():
         print ioe
     return return_passwords, return_one_password,  return_ranges
 
-def devices_information(ip_addresses):
+
+def ssh_session_connector(remote_ip,  user_password, username=None):
+    """"Establishes an SSH Connection
+
+    Args:
+        remote_ip (str): the IP of the remote SSH client to connect to
+        user_password (str): a password to be used for connection to the selected host passed as `ip`
+        username (str): an optional attribute, username which if not provided defaults in admin
+    Returns:
+        ssh_client (paramiko.SSHClient()): A ssh Client with a connection ready to execute commands
+        ssh_connection_status (str):
     """
-    Function which extracts the information about devices provided in the ip_addresses list.
+    if username is None:
+        username = 'admin'
+    print Fore.BLUE + Style.BRIGHT + '--- Attempting paramiko connection to: ', remote_ip, ' ---'
+    # create paramiko session
+    ssh_client = paramiko.SSHClient()
+    # must set missing host key policy since we don't have the SSH key
+    # stored in the 'known_hosts' file
+    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        ssh_client.connect(remote_ip, username=username, password=user_password)
+        print Fore.GREEN + Style.BRIGHT + '--- Connection to: ', remote_ip, ' established ---'
+        ssh_connection_status = True
+    except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception) as e:
+        print Fore.RED + Style.BRIGHT + '--- SSH: Could not connect to: ', remote_ip, ' ---', e
+        ssh_connection_status = False
+
+    return ssh_client, ssh_connection_status
+
+
+def ssh_session_executor(remote_ip, user_password, command_list):
+    """
+    Given a list of commands and client authentication data, executes and retrieves the result of these commands
+    using a SSH connection
+
+    Args:
+        remote_ip (str): A IP of the remote SSH Client
+        user_password (str): Password for the admin user
+        command_list ([]str): a list of commands to be executed within one ssh connection
+    Returns:
+        ssh_connection_results ({}str): The result of the ssh command list
+        ssh_stderr (str): A connection error string
+    """
+    try:
+        ssh_connection_results = {}
+        for command in command_list:
+            print Fore.WHITE + Style.BRIGHT + "Executing `%s` ..." % command
+            ssh_client, connexion_status = ssh_session_connector(remote_ip, user_password)
+            if not connexion_status:
+                raise Exception("Failed to establish an SSH Connection, while executing `%s`" % command)
+            stdin, stdout, ssh_stderr = ssh_client.exec_command(command, timeout=90)
+            ssh_connection_results[command] = stdout.read()
+            if ssh_stderr.read().find("unconnected"):
+                ssh_stderr = None
+            print ssh_connection_results[command]
+            print Fore.BLUE + Style.BRIGHT + "Successfully executed `%s` ..." % command
+            ssh_client.close()
+    except (paramiko.ssh_exception, paramiko.ssh_exception.AuthenticationException) as pe:
+        print pe
+    return ssh_connection_results, ssh_stderr
+
+
+def get_device_information(device_ip, user_password):
+    """Function which extracts the information about a device provided the `ip`.
+
+    Before using make sure that SSH is enabled on the device.
     The provided information is as follows:
-    1. Managements ip address
+    1. Management ip address
     2. Information about OS running on the device
     3. Password
     4. Hardware information
     5. Modules avaliable on the device
 
-    Before using make sure that SSH is enabled on the device.
-    
-    :param ip_addresses: list of strings - ip addresses of the devices
-    :return: dictionary with information described above
+    Args:
+        user_password (str): password for the admin user
+        device_ip (str): the IP of the device for which we want to perform the SSH Extraction
+    Returns:
+        device ({}): dictionary with information described above
     """
-    devices = []
-    
-    username = 'admin'
-    password_filename = 'password.txt'
-    
-    # loading the list of possible passwords
-    password_file = open(password_filename, 'r')  
-    password_file.seek(0)
-    passwords = password_file.readlines()
-    passwords = [password.strip('\n') for password in passwords]
-    password_file.close()
-    
-    for ip in ip_addresses:
-        passwrd = ''
-        hardware_info = ''
-        modules= []
-        os_info = []
-    
-        print '--- Attempting paramiko connection to: ', ip, ' ---'
-
-        # create paramiko session
-        ssh_client = paramiko.SSHClient()
-
-        # must set missing host key policy since we don't have the SSH key
-        # stored in the 'known_hosts' file
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        # searching for the right password
-        for password in passwords:
-            time.sleep(10)
-            try:
-                ssh_client.connect(ip,
-                            username=username,
-                            password=password)
-                passwrd = password
-            except paramiko.ssh_exception.AuthenticationException:
-                continue
-            break
-    
-        print 'Success! connecting to: ', ip
-    
-        # retriving all desired information
-        stdin, stdout, ssh_stderr = ssh_client.exec_command('show hardware')
-        show_hardware = stdout.read()
-        
+    modules = {}
+    os_info = ''
+    hardware_info = ''
+    commands = ['show inventory', 'show hardware']
+    # retriving all desired information
+    stdout, ssh_stderr = ssh_session_executor(device_ip, user_password, commands)
+    if ssh_stderr:
+        print Fore.RED + Style.BRIGHT \
+              + '--- SSH (%s): Could not execute all %s on %s:  ---' % \
+              (ssh_stderr, commands, device_ip)
+    show_hardware = stdout['show hardware']
+    if show_hardware:
         hardware_pattern = re.compile('.*(processor).*\(revision.*\)')
         hardware_info = hardware_pattern.search(show_hardware).group(0)
-    
+
         os_type_pattern = re.compile('.*(NX\-OS|IOS|IOS\-XR).*,.*,')
         os_info = os_type_pattern.search(show_hardware).group(0)[:-1]
-    
-        ssh_client.connect(ip,
-                            username=username,
-                            password=passwrd)
-        stdin, stdout, ssh_stderr = ssh_client.exec_command('show inventory')
-        show_inventory = stdout.read()
+
+    show_inventory = stdout['show inventory']
+    if show_inventory:
+        last_module_name = None
         show_inventory = show_inventory.split("\n\r")
-    
-        
-        inventory_pattern = re.compile('(NAME: \".*\",)')
+        inventory_name__pattern = re.compile('(NAME: \".*\",)')
+        inventory_desc_pattern = re.compile('(DESCR: \".*\")')
+        inventory_sn_pattern = re.compile('(SN: \d+ )')
         for line in show_inventory:
-            try:
-                modules.append(inventory_pattern.search(line).group(0)[7:-2])
-            except:
-                pass
-            
-        print '------------------------------------------------------'
-        print ' Management ip address: ', ip
-        print '        OS information: ', os_info
-        print '              Password: ', passwrd
-        print '  Hardware information: ', hardware_info
-        print '   Modules information:'
-        for mod in modules:
-            print '                        ', mod
-        print '------------------------------------------------------\n'
-    
-        devices.append({'ip': ip,
-                        'os_info': os_info,
-                        'password': passwrd,
-                        'hardware_info': hardware_info,
-                        'modules_info': modules})
-        
-    return devices
+            module = inventory_name__pattern.search(line)
+            module_desc = inventory_desc_pattern.search(line)
+            module_sn = inventory_sn_pattern.search(line)
+            if module_sn and last_module_name:
+                modules[last_module_name].update({"SN": module_sn.group(0)[4:-1]})
+                last_module_name = ''
+            elif module_sn is None and last_module_name:
+                modules[last_module_name].update({"SN": None})
+                last_module_name = ''
+            if module:
+                last_module_name = module.group(0)[7:-2]
+            if module_desc:
+                modules[last_module_name] = {"description": module_desc.group(0)[8:-1]}
+    print '------------------------------------------------------'
+    print ' Management ip address: ', device_ip
+    print '        OS information: ', os_info
+    print '              Password: ', password
+    print '  Hardware information: ', hardware_info
+    print '   Modules information:'
+    for mod in modules:
+        print '                        ', mod
+    print '------------------------------------------------------\n'
+    return {'ip': device_ip,
+            'os_info': os_info,
+            'password': password,
+            'hardware_info': hardware_info,
+            'modules_info': modules
+            }
+
+
+def set_password(tes_ip, list_of_passwords, validated_password=None):
+    if validated_password is None or not validated_password:
+        for pwd in list_of_passwords:
+            pwd = pwd.rstrip('\n\r')
+            ssh_client, status = ssh_session_connector(tes_ip, pwd)
+            if status:
+                print Fore.GREEN + Style.BRIGHT + "Got a valid Password {%s} " % pwd
+                ssh_client.close()
+                break
+            else:
+                continue
+    if not validated_password:
+        raise Exception("Failed to set a valid password")
+    return validated_password
+
 
 init()
 
@@ -372,36 +427,19 @@ try:
 
     print Style.BRIGHT + "\n################ FULFILLING PROJECTS REQUIREMENTS ################"
 
-    # For each specific task, for instance listing interfaces, modules, or os version,
-    # one can achieve that by passing specific oids, see https://tools.ietf.org/html/rfc1213
-
     try:
-        for ip in reachable_ips:
-            if not password:
-                for pwd in passwords:
-                    pwd = pwd.rstrip('\n\r')
-                    errorIndication, errorStatus, _, varBindNbrTable = check_snmp_support(ip, pwd, oid_of_interests)
-                    if not errorIndication and not errorStatus:
-                        password = pwd
-                        print Fore.GREEN + Style.BRIGHT + "* Found a matching password from the provided file ", pwd
-
-                        print Fore.GREEN + Style.BRIGHT, varBindNbrTable[0][1].prettyPrint()
-                        break
-                    else:
-                        print Fore.RED + Style.BRIGHT + "FAILED WITH ERROR: ", errorIndication, errorStatus
-                        continue
-            else:
-                errorIndication, errorStatus, errorIndex, varBindNbrTable = \
-                    check_snmp_support(ip, password, oid_of_interests)
-                if errorIndication:
-                    print errorIndication
-                if errorStatus:
-                    print errorStatus.prettyPrint()
-                else:
-                    # TODO Here process the returned tables in varBindNbrTable
-                        print Fore.GREEN + Style.BRIGHT, varBindNbrTable
-    except Exception as e:
-        print e
+        for reached_ip in reachable_ips:
+            device_data = {}
+            password = set_password(reached_ip, passwords, password)
+            stdout_data = get_device_information(reached_ip, password)
+            device_data["data"] = stdout_data
+            devices_data[reached_ip] = device_data
+    except Exception as ge:
+        print Fore.RED + Style.BRIGHT + "Caught: ", ge
+        sys.exit()
+    print Fore.WHITE + Style.BRIGHT + json.dumps(devices_data,
+                                                 sort_keys=True, indent=4, separators=(',', ': '))
+    sys.exit()
 except KeyboardInterrupt:
     print Fore.CYAN + Style.BRIGHT + "\nExecution aborted by the user"
     sys.exit()
