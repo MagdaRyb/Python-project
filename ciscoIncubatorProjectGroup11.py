@@ -63,12 +63,12 @@ try:
     import time
     import json
     from colorama import init, deinit, Fore, Style
-   # import matplotlib.pyplot as matp
+    # import matplotlib.pyplot as matp
     import networkx as nx
     from pysnmp.entity.rfc3413.oneliner import cmdgen
-except ImportError:
+except ImportError as Ie:
     print "Please Make sure to install all the required packages: \n[ subprocess, sys, argparse, getpass, " \
-          "matplotlib, networkx, pysnmp ]"
+          "matplotlib, networkx, pysnmp, datetime, re, time, json, colorama ]\n", Ie
     sys.exit()
 
 password = ''
@@ -278,7 +278,9 @@ def ssh_session_connector(remote_ip,  user_password, username=None):
     """
     if username is None:
         username = 'admin'
-    print Fore.BLUE + Style.BRIGHT + '--- Attempting paramiko connection to: ', remote_ip, ' ---'
+    print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------'
+    print Fore.BLUE + Style.BRIGHT + 'Attempting paramiko connection to: ', remote_ip
+    print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------'
     # create paramiko session
     ssh_client = paramiko.SSHClient()
     # must set missing host key policy since we don't have the SSH key
@@ -287,16 +289,20 @@ def ssh_session_connector(remote_ip,  user_password, username=None):
 
     try:
         ssh_client.connect(remote_ip, username=username, password=user_password)
-        print Fore.GREEN + Style.BRIGHT + '--- Connection to: ', remote_ip, ' established ---'
+        print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
+        print Fore.GREEN + Style.BRIGHT + 'Connection to: ', remote_ip, ' established'
+        print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
         ssh_connection_status = True
     except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception) as e:
-        print Fore.RED + Style.BRIGHT + '--- SSH: Could not connect to: ', remote_ip, ' ---', e
+        print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
+        print Fore.RED + Style.BRIGHT + 'SSH: Could not connect to: ', remote_ip, '\n', e
+        print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
         ssh_connection_status = False
 
     return ssh_client, ssh_connection_status
 
 
-def ssh_session_executor(remote_ip, user_password, command_list):
+def ssh_session_executor(remote_ip, user_password, command_list, user=None):
     """
     Given a list of commands and client authentication data, executes and retrieves the result of these commands
     using a SSH connection
@@ -305,6 +311,7 @@ def ssh_session_executor(remote_ip, user_password, command_list):
         remote_ip (str): A IP of the remote SSH Client
         user_password (str): Password for the admin user
         command_list ([]str): a list of commands to be executed within one ssh connection
+        user (str): a user responsible to establish the SSH connection
     Returns:
         ssh_connection_results ({}str): The result of the ssh command list
         ssh_stderr (str): A connection error string
@@ -312,23 +319,26 @@ def ssh_session_executor(remote_ip, user_password, command_list):
     try:
         ssh_connection_results = {}
         for command in command_list:
+            print Fore.WHITE + Style.BRIGHT + '-------------------------------------------------------------------------'
             print Fore.WHITE + Style.BRIGHT + "Executing `%s` ..." % command
-            ssh_client, connexion_status = ssh_session_connector(remote_ip, user_password)
+            print Fore.WHITE + Style.BRIGHT + '-------------------------------------------------------------------------\n'
+            ssh_client, connexion_status = ssh_session_connector(remote_ip, user_password, user)
             if not connexion_status:
                 raise Exception("Failed to establish an SSH Connection, while executing `%s`" % command)
             stdin, stdout, ssh_stderr = ssh_client.exec_command(command, timeout=90)
             ssh_connection_results[command] = stdout.read()
             if ssh_stderr.read().find("unconnected"):
                 ssh_stderr = None
-            print ssh_connection_results[command]
+            print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------'
             print Fore.BLUE + Style.BRIGHT + "Successfully executed `%s` ..." % command
+            print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------\n'
             ssh_client.close()
     except (paramiko.ssh_exception, paramiko.ssh_exception.AuthenticationException) as pe:
         print pe
     return ssh_connection_results, ssh_stderr
 
 
-def get_device_information(device_ip, user_password):
+def get_device_information(device_ip, user_password,  user=None):
     """Function which extracts the information about a device provided the `ip`.
 
     Before using make sure that SSH is enabled on the device.
@@ -342,6 +352,7 @@ def get_device_information(device_ip, user_password):
     Args:
         user_password (str): password for the admin user
         device_ip (str): the IP of the device for which we want to perform the SSH Extraction
+        user (str): the user to establish SSH connection
     Returns:
         device ({}): dictionary with information described above
     """
@@ -350,11 +361,11 @@ def get_device_information(device_ip, user_password):
     hardware_info = ''
     commands = ['show inventory', 'show hardware']
     # retriving all desired information
-    stdout, ssh_stderr = ssh_session_executor(device_ip, user_password, commands)
+    stdout, ssh_stderr = ssh_session_executor(device_ip, user_password, commands, user)
     if ssh_stderr:
-        print Fore.RED + Style.BRIGHT \
-              + '--- SSH (%s): Could not execute all %s on %s:  ---' % \
-              (ssh_stderr, commands, device_ip)
+        print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
+        print Fore.RED + Style.BRIGHT + ' SSH (%s): Could not execute all %s on %s:' % (ssh_stderr, commands, device_ip)
+        print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
     show_hardware = stdout['show hardware']
     if show_hardware:
         hardware_pattern = re.compile('.*(processor).*\(revision.*\)')
@@ -384,7 +395,7 @@ def get_device_information(device_ip, user_password):
                 last_module_name = module.group(0)[7:-2]
             if module_desc:
                 modules[last_module_name] = {"description": module_desc.group(0)[8:-1]}
-    print '------------------------------------------------------'
+    print '-------------------------------------------------------------------------'
     print ' Management ip address: ', device_ip
     print '        OS information: ', os_info
     print '              Password: ', password
@@ -392,13 +403,50 @@ def get_device_information(device_ip, user_password):
     print '   Modules information:'
     for mod in modules:
         print '                        ', mod
-    print '------------------------------------------------------\n'
+    print '-------------------------------------------------------------------------\n'
     return {'ip': device_ip,
             'os_info': os_info,
             'password': password,
             'hardware_info': hardware_info,
             'modules_info': modules
             }
+
+def get_device_interfaces_information(device_ip, user_password, user=None):
+    """Function to retrieve information about all the interfaces on a device
+
+    Given an IP address using a SSH connection, retrieves all the interfaces and their contained informations
+    Args:
+        device_ip (str): the IP of the device for which to retrieve interfaces' information
+        user_password (str): the User password to be used to authenticate on the device
+        user (str): the user establishing the connection. Defaults to admin
+    Returns:
+        interfaces ({}): A list of all the interfaces with selected relevent information
+    """
+    interfaces = {}
+    interface_name_pattern = re.compile("(^\w+(?:|[/\-\.]\w+) )")
+    iternet_address_pattern = re.compile('(Internet address is \d+\.\d+\.\d+\.\d+\/d+)')
+
+    commands = ['show interfaces']
+    stdout, ssh_stderr = ssh_session_executor(device_ip, user_password, commands, user)
+    if ssh_stderr:
+        print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
+        print Fore.RED + Style.BRIGHT + ' SSH (%s): Could not execute all %s on %s:' % (ssh_stderr, commands, device_ip)
+        print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
+    show_interfaces = re.compile("(?m)((?:^\w+.*\n)(^\s+\w+.*\n)+)").split(stdout['show interfaces'])
+    for interface in show_interfaces:
+        interface_name_block = interface_name_pattern.search(interface)
+        address = iternet_address_pattern.search(interface)
+        if interface_name_block:
+            interface_name = interface_name_block.group(0)
+            print Fore.WHITE + Style.BRIGHT + '-------------------------------------------------------------------------'
+            print Fore.WHITE + Style.BRIGHT + 'Getting Information for: ', interface_name
+            print Fore.WHITE + Style.BRIGHT + '-------------------------------------------------------------------------\n'
+            print Fore.WHITE + Style.BRIGHT + ' ', interface
+            interfaces[interface_name] = {"interface_informations": interface}
+        if address:
+            interfaces[interface_name.group(0)].update({"interface_address_ip": address.group(0)[20:-3],
+                                              "address_mask": address.group(0)[23:]})
+    return interfaces
 
 
 def set_password(tes_ip, list_of_passwords, validated_password=None):
@@ -417,31 +465,77 @@ def set_password(tes_ip, list_of_passwords, validated_password=None):
     return validated_password
 
 
+def resultCollectionMethod(data, option=json):
+    print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
+    print Fore.WHITE + Style.BRIGHT + "                        RESULTS COLLECTION "
+    print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
+    print Fore.BLUE + Style.BRIGHT + 'How would you like to collect your logs'
+
+    to_file = json.dumps(data, sort_keys=True, indent=4, separators=(',', ': '))
+
+    def print_to_cli():
+        print Fore.CYAN + Style.BRIGHT + '-----------------------------------START-----------------------------------'
+        print Fore.CYAN + Style.BRIGHT + to_file
+        print Fore.CYAN + Style.BRIGHT + '------------------------------------END------------------------------------'
+
+    def return_json_file():
+        print Fore.YELLOW + Style.BRIGHT + 'WARNING: You must have the right to write a file to the given Path'
+        file_path = raw_input("Please enter the file name (with path) --> Leave it empty to use timestamp name : ")
+        if file_path:
+            if re.search("(^.*.json$)", file_path):
+                new_file = open(file_path, 'w')
+            else:
+                new_file = open(file_path + '.json', 'w')
+        else:
+            from time import gmtime, strftime
+            file_path = re.sub(r"[:\,\s]", '-', strftime("%Y-%m-%d %H:%M:%S", gmtime()))
+            new_file = open(file_path + '.json', 'w')
+        new_file.write(to_file)
+        new_file.close()
+
+    def return_html_file():
+        print Fore.RED + Style.BRIGHT + 'Not yet Implemented, choose between JSON FILE and PRINT HERE '
+        resultCollectionMethod(data)
+    def make_git_commit():
+        print Fore.RED + Style.BRIGHT + 'Not yet Implemented, choose between JSON FILE and PRINT HERE '
+        resultCollectionMethod(data)
+
+    options = {4: print_to_cli,
+               1: return_json_file,
+               2: return_html_file,
+               3: make_git_commit,
+               }
+    choice = input(
+        "Enter your Choice (One of the given numbers) \n\t1. 'JSON FILE'"
+        "\n\t2. 'HTML PAGE' \n\t3. 'PRINT HERE'\n\t4. 'GIT COMMIT'\n", )
+    try:
+        if int(choice) not in range(1, 5):
+            raise ValueError
+    except ValueError:
+        print Fore.YELLOW + Style.BRIGHT + 'WARNING: You should have entered a number. Printing the results to CLI'
+    options[choice]()
+
+
 init()
 
 try:
-
-    print Style.BRIGHT + "\n################### LOADING CONFIGURATIONS... ###################"
+    print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
+    print Fore.WHITE + Style.BRIGHT + "                    NETWORK DISCOVERY EXECUTION "
+    print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
     passwords, password, ranges = load_configuration()
     check_iprange_and_retrieve_available_ips(ranges)
-
-    print Style.BRIGHT + "\n################ FULFILLING PROJECTS REQUIREMENTS ################"
-
-    try:
-        for reached_ip in reachable_ips:
-            device_data = {}
-            password = set_password(reached_ip, passwords, password)
-            stdout_data = get_device_information(reached_ip, password)
-            device_data["data"] = stdout_data
-            devices_data[reached_ip] = device_data
-    except Exception as ge:
-        print Fore.RED + Style.BRIGHT + "Caught: ", ge
-        sys.exit()
-    print Fore.WHITE + Style.BRIGHT + json.dumps(devices_data,
-                                                 sort_keys=True, indent=4, separators=(',', ': '))
-    sys.exit()
-except KeyboardInterrupt:
-    print Fore.CYAN + Style.BRIGHT + "\nExecution aborted by the user"
+    for reached_ip in reachable_ips:
+        device_data = {}
+        device_interface = {}
+        password = set_password(reached_ip, passwords, password)
+        device_data["device_hardware_os_information"] = get_device_information(reached_ip, password)
+        devices_data[reached_ip] = device_data
+        device_interface["device_interfaces_information"] = get_device_interfaces_information(reached_ip, password)
+        devices_data[reached_ip].update(device_interface)
+    resultCollectionMethod(devices_data)
+except (KeyboardInterrupt, Exception) as exception_or_key:
+    print Fore.BLUE + Style.BRIGHT, exception_or_key
+    resultCollectionMethod(devices_data)
     sys.exit()
 
 deinit()
