@@ -71,36 +71,30 @@ except ImportError as Ie:
           "matplotlib, networkx, pysnmp, datetime, re, time, json, colorama ]\n", Ie
     sys.exit()
 
+"""str:  The validated password for SNMP. This should hold a valid communityString  """
 password = ''
-"""str:  The validated password for SNMP 
 
-This should hold a valid communityString 
-"""
+"""[]:  Stores the list of all candidate passwords. Always retrieved from a text file, else it is be empty"""
 passwords = []
-"""[]str:  Stores the list of all candidate passwords 
 
-Always retrieved from a text file, else it is be empty
-"""
+"""[]: Accumulator of all provided ranges of IPs, Always retrieved from a text file, else it is be empty """
 ranges = []
-"""[]str: Accumulator of all ser provided ranges of IPs
 
-Always retrieved from a text file, else it is be empty
-"""
+"""[]: List of devices which responds to a ping request """
 reachable_ips = []
-"""[]str: List of devices available 
 
-This list is made of IPs which responds to a ping request
-"""
+"""[]: Dictionary of all the data retrieved fo a specif device """
 devices_data = {}
-"""[]str: Dictionary of all the data retrieved fo a specif device 
 
-"""
+"""str: Cisco ClientID to be able to retrieve EoL data """
+cisco_user = ''
 
+"""str: Cisco ClientSecret to be able to retrieve EoL data """
+cisco_password = ''
+
+"""[]: List of OIDs of a particular interest in order to fulfill the project requirements"""
 oid_of_interests = '1.3.6.1.2.1.1.1.0'
 
-"""[]str: List of OIDs of a particular interest in order to fulfill the project requirements
-
-"""
 
 def check_snmp_support(ip_address, community_string, list_oid_of_interests):
     """ Function to check SNMP support
@@ -146,8 +140,8 @@ def list_reachable_ips(start_ip_bytes, nbr_host):
     Returns all reachable IPs starting from the `start_ip` and incrementally with respect to `nbr_host`
 
     Args:
-        start_ip_bytes ([]str) : the first IP address in the given range
-        nbr_host ([]str): The number of hosts in the range
+        start_ip_bytes ([]) : the first IP address in the given range
+        nbr_host ([]): The number of hosts in the range
 
     Returns:
         ip_list: The list of all reachable ips
@@ -179,7 +173,7 @@ def check_iprange_and_retrieve_available_ips(list_of_ranges):
     eg. 10.45.24.3#23 (means from 10.45.24.3 - 10.45.24.26)
 
     Args:
-        list_of_ranges: List of all IP ranges Candidates
+        list_of_ranges ([]): List of all IP ranges Candidates
     """
     for ip_range in list_of_ranges:
         ip_bytes = ip_range.split('.')
@@ -205,9 +199,9 @@ def load_configuration():
     tries to use the sample ones from the script directory
 
     Returns:
-        return_passwords ([]str): A list of candidate passwords from the user defined file
+        return_passwords ([]): A list of candidate passwords from the user defined file
         return_password (str): Is set in case the password was entered from the CLI
-        return_ranges ([]str): A list of candidate network IP ranges form a user provided file
+        return_ranges ([]): A list of candidate network IP ranges form a user provided file
     """
     option_parser = argparse.ArgumentParser(description="Retrieves the network topology, "
                                                         "all its devices and their interfaces information")
@@ -310,10 +304,10 @@ def ssh_session_executor(remote_ip, user_password, command_list, user=None):
     Args:
         remote_ip (str): A IP of the remote SSH Client
         user_password (str): Password for the admin user
-        command_list ([]str): a list of commands to be executed within one ssh connection
+        command_list ([]): a list of commands to be executed within one ssh connection
         user (str): a user responsible to establish the SSH connection
     Returns:
-        ssh_connection_results ({}str): The result of the ssh command list
+        ssh_connection_results ({}): The result of the ssh command list
         ssh_stderr (str): A connection error string
     """
     try:
@@ -338,7 +332,7 @@ def ssh_session_executor(remote_ip, user_password, command_list, user=None):
     return ssh_connection_results, ssh_stderr
 
 
-def get_device_information(device_ip, user_password,  user=None):
+def get_device_information(device_ip, user_password,  user=None, token=None):
     """Function which extracts the information about a device provided the `ip`.
 
     Before using make sure that SSH is enabled on the device.
@@ -348,11 +342,11 @@ def get_device_information(device_ip, user_password,  user=None):
     3. Password
     4. Hardware information
     5. Modules avaliable on the device
-
     Args:
         user_password (str): password for the admin user
         device_ip (str): the IP of the device for which we want to perform the SSH Extraction
         user (str): the user to establish SSH connection
+        token (str): a cisco Client_Access_Token
     Returns:
         device ({}): dictionary with information described above
     """
@@ -386,7 +380,9 @@ def get_device_information(device_ip, user_password,  user=None):
             module_desc = inventory_desc_pattern.search(line)
             module_sn = inventory_sn_pattern.search(line)
             if module_sn and last_module_name:
-                modules[last_module_name].update({"SN": module_sn.group(0)[4:-1]})
+                sn = module_sn.group(0)[4:-1]
+                modules[last_module_name].update({"SN": sn})
+                modules[last_module_name].update(get_eof_eos_information(sn, token=token))
                 last_module_name = ''
             elif module_sn is None and last_module_name:
                 modules[last_module_name].update({"SN": None})
@@ -410,6 +406,7 @@ def get_device_information(device_ip, user_password,  user=None):
             'hardware_info': hardware_info,
             'modules_info': modules
             }
+
 
 def get_device_interfaces_information(device_ip, user_password, user=None):
     """Function to retrieve information about all the interfaces on a device
@@ -496,6 +493,7 @@ def resultCollectionMethod(data, option=json):
     def return_html_file():
         print Fore.RED + Style.BRIGHT + 'Not yet Implemented, choose between JSON FILE and PRINT HERE '
         resultCollectionMethod(data)
+
     def make_git_commit():
         print Fore.RED + Style.BRIGHT + 'Not yet Implemented, choose between JSON FILE and PRINT HERE '
         resultCollectionMethod(data)
@@ -516,6 +514,67 @@ def resultCollectionMethod(data, option=json):
     options[choice]()
 
 
+def get_cisco_console_api_token(user, user_password):
+    """Get a token to be used to retrieve EoL EoS informations
+
+    Args:
+        user (str): A user with access to cisco console api
+        user_password (str): The password of the user to access the cisco console api
+    Return:
+        token (str): A token to be used in the header for a curl-like call to cisco console api
+    """
+    try:
+        import requests
+        url = 'https://cloudsso.cisco.com/as/token.oauth2/client_id='+user +\
+              '&grant_type=client_credentials&client_secret=' + user_password
+        headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8', }
+        r = requests.get(url, headers=headers)
+        if r.status_code != 200:
+            print "Failed to retrieve EoL/EoS information", r.text
+        if r.text:
+            token = json.load(r.text)[0]['access_token']
+        r.close()
+        if token:
+            return token
+        else:
+            return None
+    except ImportError as e:
+        print e
+        return None
+
+
+def get_eof_eos_information(sn, token=None):
+    """Function to retrieve EoL and EoS informations about a device
+
+    Given the id of a Serial Number of a module, returns The EoL and EoS from apiconsole.cisco.com
+    Args:
+        sn (str): The serial number of the module
+        token (str): The Authentication token for
+    Returns:
+
+    """
+    print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------'
+    print Fore.BLUE + Style.BRIGHT + "                   Collecting EoL/EoS Informations "
+    print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
+    if token is None:
+        token = input("Enter your authentication token")
+    try:
+        import requests
+        url = 'https://api.cisco.com/supporttools/eox/rest/5/EOXBySerialNumber/1/'+sn
+        headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8', 'Authorization': 'Bear '+token}
+        r = requests.get(url, headers=headers)
+        if r.status_code != 200:
+            print "Failed to retrieve EoL/EoS information", r.text
+        data = r.text
+        r.close()
+        print data
+    except (ImportError, requests.exceptions) as geol:
+        if isinstance(geol, ImportError):
+            print 'Make sure you have installed [requests]: [python] pip install requests'
+        print geol
+    return {'end_of_life_or_end_of_service':  data}
+
+
 init()
 
 try:
@@ -528,7 +587,8 @@ try:
         device_data = {}
         device_interface = {}
         password = set_password(reached_ip, passwords, password)
-        device_data["device_hardware_os_information"] = get_device_information(reached_ip, password)
+        device_data["device_hardware_os_information"] = \
+            get_device_information(reached_ip, password, token=get_cisco_console_api_token(cisco_user, cisco_password))
         devices_data[reached_ip] = device_data
         device_interface["device_interfaces_information"] = get_device_interfaces_information(reached_ip, password)
         devices_data[reached_ip].update(device_interface)
