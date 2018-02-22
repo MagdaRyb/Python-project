@@ -95,6 +95,8 @@ cisco_password = ''
 """[]: List of OIDs of a particular interest in order to fulfill the project requirements"""
 oid_of_interests = '1.3.6.1.2.1.1.1.0'
 
+"""str: Cisco Cliend Access Token"""
+cisco_access_token = ''
 
 def check_snmp_support(ip_address, community_string, list_oid_of_interests):
     """ Function to check SNMP support
@@ -194,7 +196,8 @@ def check_iprange_and_retrieve_available_ips(list_of_ranges):
 
 
 def load_configuration():
-    """
+    """Function to load the arguments from the CLI
+
     Loads ranges and passwords configurations as provided by the user using CLI flags or
     tries to use the sample ones from the script directory
 
@@ -216,6 +219,15 @@ def load_configuration():
                                     'If the given value is empty, the program attempts to acquire a password from ' +
                                     'the password.txt file in the directory where projectLauncher.py is located.\n'
                                )
+    option_parser.add_argument('--token', '-t', dest='token_arg',
+                               help='A String token needed for retrieval of EoL/EoS informations '
+                                    'from apiconsole.cisco.com access')
+    option_parser.add_argument('--ciscouser', '-c', dest='cisco_arg',
+                               help='if no `token` (--token | -t flag) was provided one '
+                                    'can specify a cisco ClientID and then provide'
+                                    ' its attached secret for login')
+    option_parser.add_argument('--ciscosecret', '-s', dest='secret_arg',
+                               help='The secret for the Cisco ClientID passed by `--ciscouser | -c` flag')
     option_parser.add_argument('-f', '--file', dest='from_f',
                                help='Enables to read ranges and passwords values from given files on the CLI.' +
                                     'Should be followed by `--range | -r` or `--password | -p` flags\n')
@@ -224,6 +236,7 @@ def load_configuration():
     return_one_password = ''
     return_passwords = []
     return_ranges = []
+    return_cisco_password = ''
 
     try:
         if args.pwd_arg:
@@ -254,9 +267,15 @@ def load_configuration():
             with open('range.txt', "r") as ranges_file:
                 return_ranges = ranges_file.readlines()
             ranges_file.close()
+        if args.cisco_arg:
+            if not args.secret_arg:
+                return_cisco_password = getpass.getpass()
+            else:
+                return_cisco_password = args.secret_arg
     except IOError as ioe:
         print ioe
-    return return_passwords, return_one_password,  return_ranges
+    return return_passwords, return_one_password,  return_ranges, \
+        args.token_arg, args.cisco_arg, return_cisco_password
 
 
 def ssh_session_connector(remote_ip,  user_password, username=None):
@@ -350,6 +369,8 @@ def get_device_information(device_ip, user_password,  user=None, token=None):
     Returns:
         device ({}): dictionary with information described above
     """
+    if token is None:
+        print Fore.YELLOW +Style.BRIGHT + "No EoX Informations will be returned for the Device "
     modules = {}
     os_info = ''
     hardware_info = ''
@@ -360,13 +381,6 @@ def get_device_information(device_ip, user_password,  user=None, token=None):
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
         print Fore.RED + Style.BRIGHT + ' SSH (%s): Could not execute all %s on %s:' % (ssh_stderr, commands, device_ip)
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
-    show_hardware = stdout['show hardware']
-    if show_hardware:
-        hardware_pattern = re.compile('.*(processor).*\(revision.*\)')
-        hardware_info = hardware_pattern.search(show_hardware).group(0)
-
-        os_type_pattern = re.compile('.*(NX\-OS|IOS|IOS\-XR).*,.*,')
-        os_info = os_type_pattern.search(show_hardware).group(0)[:-1]
 
     show_inventory = stdout['show inventory']
     if show_inventory:
@@ -376,6 +390,7 @@ def get_device_information(device_ip, user_password,  user=None, token=None):
         inventory_desc_pattern = re.compile('(DESCR: \".*\")')
         inventory_sn_pattern = re.compile('(SN: \d+ )')
         for line in show_inventory:
+            print Fore.WHITE + Style.BRIGHT, line
             module = inventory_name__pattern.search(line)
             module_desc = inventory_desc_pattern.search(line)
             module_sn = inventory_sn_pattern.search(line)
@@ -391,6 +406,15 @@ def get_device_information(device_ip, user_password,  user=None, token=None):
                 last_module_name = module.group(0)[7:-2]
             if module_desc:
                 modules[last_module_name] = {"description": module_desc.group(0)[8:-1]}
+    show_hardware = stdout['show hardware']
+    if show_hardware:
+        print Fore.WHITE + Style.BRIGHT, show_hardware
+        hardware_pattern = re.compile('.*(processor).*\(revision.*\)')
+        hardware_info = hardware_pattern.search(show_hardware).group(0)
+
+        os_type_pattern = re.compile('.*(NX\-OS|IOS|IOS\-XR).*,.*,')
+        os_info = os_type_pattern.search(show_hardware).group(0)[:-1]
+
     print '-------------------------------------------------------------------------'
     print ' Management ip address: ', device_ip
     print '        OS information: ', os_info
@@ -498,10 +522,10 @@ def resultCollectionMethod(data, option=json):
         print Fore.RED + Style.BRIGHT + 'Not yet Implemented, choose between JSON FILE and PRINT HERE '
         resultCollectionMethod(data)
 
-    options = {4: print_to_cli,
+    options = {3: print_to_cli,
                1: return_json_file,
                2: return_html_file,
-               3: make_git_commit,
+               4: make_git_commit,
                }
     choice = input(
         "Enter your Choice (One of the given numbers) \n\t1. 'JSON FILE'"
@@ -525,21 +549,32 @@ def get_cisco_console_api_token(user, user_password):
     """
     try:
         import requests
-        url = 'https://cloudsso.cisco.com/as/token.oauth2/client_id='+user +\
-              '&grant_type=client_credentials&client_secret=' + user_password
-        headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8', }
-        r = requests.get(url, headers=headers)
+        import StringIO
+        url = 'https://cloudsso.cisco.com/as/token.oauth2?grant_type=client_credentials'
+        headers = {'Content-Type': 'application/json', 'Accept-Charset': 'UTF-8'}
+        result_buffer = StringIO.StringIO()
+        r = requests.post(url, auth=(user, user_password), data=result_buffer, headers=headers)
         if r.status_code != 200:
-            print "Failed to retrieve EoL/EoS information", r.text
-        if r.text:
-            token = json.load(r.text)[0]['access_token']
+            print "Failed to retrieve EoL/EoS information", result_buffer.getvalue()
+            return None
+        token_data = r.text
+        print token_data
         r.close()
-        if token:
-            return token
+        result_buffer.close()
+        access_token_pattern = re.compile('(\"access_token\":\"\w+(?:|[\=\_])\"\,)')
+        if token_data:
+            rt_token = access_token_pattern.search(token_data)
+            if rt_token:
+                return rt_token.group(0)[16:-2]
+            else:
+             return None
+            return token_data
         else:
             return None
-    except ImportError as e:
-        print e
+    except (ImportError, requests.exceptions, Exception) as ire:
+        if isinstance(ire, ImportError):
+            print 'Please Consider getting these modules: [requests, StringIO]'
+        print 'Cauth Exception: ', ire
         return None
 
 
@@ -553,49 +588,62 @@ def get_eof_eos_information(sn, token=None):
     Returns:
 
     """
+    if token is None:
+        return {'end_of_life_or_end_of_service':  None}
     print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------'
     print Fore.BLUE + Style.BRIGHT + "                   Collecting EoL/EoS Informations "
     print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
-    if token is None:
-        token = input("Enter your authentication token")
     try:
         import requests
+        import StringIO
+    except ImportError:
+        print 'Make sure you have installed [requests]: [python] pip install requests'
+        return {'end_of_life_or_end_of_service': None}
+    try:
         url = 'https://api.cisco.com/supporttools/eox/rest/5/EOXBySerialNumber/1/'+sn
-        headers = {'content-type': 'application/json', 'Accept-Charset': 'UTF-8', 'Authorization': 'Bear '+token}
-        r = requests.get(url, headers=headers)
+
+        headers = {'Content-Type': 'application/json', 'Accept-Charset': 'UTF-8', 'Authorization': 'Bearer '+token}
+        results_buffer = StringIO.StringIO()
+        r = requests.get(url, data=results_buffer, headers=headers)
         if r.status_code != 200:
             print "Failed to retrieve EoL/EoS information", r.text
-        data = r.text
+        data = r.json()
         r.close()
+        results_buffer.close()
         print data
-    except (ImportError, requests.exceptions) as geol:
+    except (Exception, requests.exceptions) as geol:
         if isinstance(geol, ImportError):
-            print 'Make sure you have installed [requests]: [python] pip install requests'
-        print geol
+            print 'Please Consider getting these modules: [requests, StringIO]'
+        print 'Cauth Exception: ', geol
+        data = None
     return {'end_of_life_or_end_of_service':  data}
 
 
-init()
+if __name__ == '__main__':
+    init()
 
-try:
-    print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
-    print Fore.WHITE + Style.BRIGHT + "                    NETWORK DISCOVERY EXECUTION "
-    print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
-    passwords, password, ranges = load_configuration()
-    check_iprange_and_retrieve_available_ips(ranges)
-    for reached_ip in reachable_ips:
-        device_data = {}
-        device_interface = {}
-        password = set_password(reached_ip, passwords, password)
-        device_data["device_hardware_os_information"] = \
-            get_device_information(reached_ip, password, token=get_cisco_console_api_token(cisco_user, cisco_password))
-        devices_data[reached_ip] = device_data
-        device_interface["device_interfaces_information"] = get_device_interfaces_information(reached_ip, password)
-        devices_data[reached_ip].update(device_interface)
-    resultCollectionMethod(devices_data)
-except (KeyboardInterrupt, Exception) as exception_or_key:
-    print Fore.BLUE + Style.BRIGHT, exception_or_key
-    resultCollectionMethod(devices_data)
-    sys.exit()
+    try:
+        print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
+        print Fore.WHITE + Style.BRIGHT + "                    NETWORK DISCOVERY EXECUTION "
+        print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
+        passwords, password, ranges, cisco_access_token,\
+            cisco_user, cisco_password = load_configuration()
+        check_iprange_and_retrieve_available_ips(ranges)
+        for reached_ip in reachable_ips:
+            device_data = {}
+            device_interface = {}
+            password = set_password(reached_ip, passwords, password)
+            if not cisco_access_token:
+                cisco_access_token = get_cisco_console_api_token(cisco_user, cisco_password)
+            device_data["device_hardware_os_information"] = \
+                get_device_information(reached_ip, password, token=cisco_access_token)
+            devices_data[reached_ip] = device_data
+            device_interface["device_interfaces_information"] = get_device_interfaces_information(reached_ip, password)
+            devices_data[reached_ip].update(device_interface)
+        resultCollectionMethod(devices_data)
+    except (KeyboardInterrupt, Exception) as exception_or_key:
+        print Fore.BLUE + Style.BRIGHT, exception_or_key
+        resultCollectionMethod(devices_data)
+        sys.exit()
 
-deinit()
+    deinit()
