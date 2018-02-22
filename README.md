@@ -34,11 +34,11 @@ The present project is designed to fulfill the requirements stated [here](https:
 
 #### Topology
 
- ![Topology.png](https://raw.github.com/MagdaRyb/Python-project/Initial-Commit/static-content/Topology.png)
+ ![Topology.png](https://raw.github.com/MagdaRyb/Python-project/master/static-content/Topology.png)
  
 #### Configurations
 
-In order to test the present, one should refer to [the configuration files](https://github.com/MagdaRyb/Python-project/tree/Initial-Commit/static-content)
+In order to test the present, one should refer to [the configuration files](https://github.com/MagdaRyb/Python-project/tree/master/static-content)
  or provide  a personalized topology, configs, passwords and range files
 
 #### Python Version
@@ -57,13 +57,14 @@ $ python -m pip install networkx    # Not in use
 $ python -m pip install setuptools  
 $ python -m pip install colorama    # For styled printing
 
+
 ```
 
 #### How to test 
 
 To test the present, make sure to be connected to the network you would like to query. 
-- Setup SNMP on these devices  with a Community String that you will add to the [password.txt](https://raw.github.com/MagdaRyb/Python-project/Initial-Commit/password.txt) file
-- Add the range of IPs used in the network in the [range.txt](https://raw.github.com/MagdaRyb/Python-project/Initial-Commit/range.txt) file 
+- Setup SNMP on these devices  with a Community String that you will add to the [password.txt](https://raw.github.com/MagdaRyb/Python-project/master/password.txt) file
+- Add the range of IPs used in the network in the [range.txt](https://raw.github.com/MagdaRyb/Python-project/master/range.txt) file 
 - Execute one of the command given below  
     ```bash
    $ python projectLauncher.py
@@ -78,4 +79,4 @@ To test the present, make sure to be connected to the network you would like to 
 
 #### What's next?
 
-See the module [documentation](http://htmlpreview.github.com/?https://github.com/MagdaRyb/Python-project/blob/Initial-Commit/static-content/Docs/ciscoIncubatorProjectGroup11.html)
+See the module [documentation](http://htmlpreview.github.com/?https://github.com/MagdaRyb/Python-project/blob/master/static-content/Docs/ciscoIncubatorProjectGroup11.html)
