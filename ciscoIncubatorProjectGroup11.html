@@ -9,7 +9,7 @@
 <td valign=bottom>&nbsp;<br>
 <font color="#ffffff" face="helvetica, arial">&nbsp;<br><big><big><strong>ciscoIncubatorProjectGroup11</strong></big></big></font></td
 ><td align=right valign=bottom
-><font color="#ffffff" face="helvetica, arial"><a href=".">index</a><br><a href="https://raw.githubusercontent.com/MagdaRyb/Python-project/Initial-Commit/ciscoIncubatorProjectGroup11.py">ciscoIncubatorProjectGroup11.py</a></font></td></tr></table>
+><font color="#ffffff" face="helvetica, arial"><a href=".">index</a><br><a href="https://raw.githubusercontent.com/MagdaRyb/Python-project/master/ciscoIncubatorProjectGroup11.py">ciscoIncubatorProjectGroup11.py</a></font></td></tr></table>
     <p><tt>Network&nbsp;Explorer&nbsp;Module<br>
 &nbsp;<br>
 Developed&nbsp;in&nbsp;fulfillment&nbsp;of&nbsp;the&nbsp;requirement&nbsp;defined&nbsp;on<br>
@@ -70,11 +70,15 @@ Attributes:<br>
 <tr><td bgcolor="#aa55cc"><tt>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</tt></td><td>&nbsp;</td>
 <td width="100%"><table width="100%" summary="list"><tr><td width="25%" valign=top><a href="argparse.html">argparse</a><br>
 <a href="pysnmp.entity.rfc3413.oneliner.cmdgen.html">pysnmp.entity.rfc3413.oneliner.cmdgen</a><br>
-</td><td width="25%" valign=top><a href="getpass.html">getpass</a><br>
+<a href="getpass.html">getpass</a><br>
+</td><td width="25%" valign=top><a href="json.html">json</a><br>
 <a href="networkx.html">networkx</a><br>
-</td><td width="25%" valign=top><a href="subprocess.html">subprocess</a><br>
+<a href="paramiko.html">paramiko</a><br>
+</td><td width="25%" valign=top><a href="re.html">re</a><br>
+<a href="subprocess.html">subprocess</a><br>
 <a href="sys.html">sys</a><br>
-</td><td width="25%" valign=top></td></tr></table></td></tr></table><p>
+</td><td width="25%" valign=top><a href="time.html">time</a><br>
+</td></tr></table></td></tr></table><p>
 <table width="100%" cellspacing=0 cellpadding=2 border=0 summary="section">
 <tr bgcolor="#eeaa77">
 <td colspan=3 valign=bottom>&nbsp;<br>
@@ -89,7 +93,7 @@ character&nbsp;and&nbsp;a&nbsp;number&nbsp;X&nbsp;so&nbsp;that&nbsp;the&nbsp;sum
 eg.&nbsp;10.45.24.3#23&nbsp;(means&nbsp;from&nbsp;10.45.24.3&nbsp;-&nbsp;10.45.24.26)<br>
 &nbsp;<br>
 Args:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;list_of_ranges:&nbsp;List&nbsp;of&nbsp;all&nbsp;IP&nbsp;ranges&nbsp;Candidates</tt></dd></dl>
+&nbsp;&nbsp;&nbsp;&nbsp;list_of_ranges&nbsp;([]):&nbsp;List&nbsp;of&nbsp;all&nbsp;IP&nbsp;ranges&nbsp;Candidates</tt></dd></dl>
  <dl><dt><a name="-check_snmp_support"><strong>check_snmp_support</strong></a>(ip_address, community_string, list_oid_of_interests)</dt><dd><tt>Function&nbsp;to&nbsp;check&nbsp;SNMP&nbsp;support<br>
 &nbsp;<br>
 Given&nbsp;an&nbsp;IP&nbsp;address&nbsp;and&nbsp;a&nbsp;community&nbsp;string,&nbsp;performs&nbsp;an&nbsp;snmp&nbsp;extract<br>
@@ -103,23 +107,86 @@ Returns:<br>
 Raises:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;NameError:&nbsp;Due&nbsp;to&nbsp;wrong&nbsp;module&nbsp;call/loading<br>
 &nbsp;&nbsp;&nbsp;&nbsp;Exception:&nbsp;Any&nbsp;kind&nbsp;of&nbsp;exception&nbsp;due&nbsp;to&nbsp;pysnmp&nbsp;module&nbsp;usage</tt></dd></dl>
+ <dl><dt><a name="-get_cisco_console_api_token"><strong>get_cisco_console_api_token</strong></a>(user, user_password)</dt><dd><tt>Get&nbsp;a&nbsp;token&nbsp;to&nbsp;be&nbsp;used&nbsp;to&nbsp;retrieve&nbsp;EoL&nbsp;EoS&nbsp;informations<br>
+&nbsp;<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user&nbsp;(str):&nbsp;A&nbsp;user&nbsp;with&nbsp;access&nbsp;to&nbsp;cisco&nbsp;console&nbsp;api<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user_password&nbsp;(str):&nbsp;The&nbsp;password&nbsp;of&nbsp;the&nbsp;user&nbsp;to&nbsp;access&nbsp;the&nbsp;cisco&nbsp;console&nbsp;api<br>
+Return:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;token&nbsp;(str):&nbsp;A&nbsp;token&nbsp;to&nbsp;be&nbsp;used&nbsp;in&nbsp;the&nbsp;header&nbsp;for&nbsp;a&nbsp;curl-like&nbsp;call&nbsp;to&nbsp;cisco&nbsp;console&nbsp;api</tt></dd></dl>
+ <dl><dt><a name="-get_device_information"><strong>get_device_information</strong></a>(device_ip, user_password, user<font color="#909090">=None</font>, token<font color="#909090">=None</font>)</dt><dd><tt>Function&nbsp;which&nbsp;extracts&nbsp;the&nbsp;information&nbsp;about&nbsp;a&nbsp;device&nbsp;provided&nbsp;the&nbsp;`ip`.<br>
+&nbsp;<br>
+Before&nbsp;using&nbsp;make&nbsp;sure&nbsp;that&nbsp;SSH&nbsp;is&nbsp;enabled&nbsp;on&nbsp;the&nbsp;device.<br>
+The&nbsp;provided&nbsp;information&nbsp;is&nbsp;as&nbsp;follows:<br>
+1.&nbsp;Management&nbsp;ip&nbsp;address<br>
+2.&nbsp;Information&nbsp;about&nbsp;OS&nbsp;running&nbsp;on&nbsp;the&nbsp;device<br>
+3.&nbsp;Password<br>
+4.&nbsp;Hardware&nbsp;information<br>
+5.&nbsp;Modules&nbsp;avaliable&nbsp;on&nbsp;the&nbsp;device<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user_password&nbsp;(str):&nbsp;password&nbsp;for&nbsp;the&nbsp;admin&nbsp;user<br>
+&nbsp;&nbsp;&nbsp;&nbsp;device_ip&nbsp;(str):&nbsp;the&nbsp;IP&nbsp;of&nbsp;the&nbsp;device&nbsp;for&nbsp;which&nbsp;we&nbsp;want&nbsp;to&nbsp;perform&nbsp;the&nbsp;SSH&nbsp;Extraction<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user&nbsp;(str):&nbsp;the&nbsp;user&nbsp;to&nbsp;establish&nbsp;SSH&nbsp;connection<br>
+&nbsp;&nbsp;&nbsp;&nbsp;token&nbsp;(str):&nbsp;a&nbsp;cisco&nbsp;Client_Access_Token<br>
+Returns:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;device&nbsp;({}):&nbsp;dictionary&nbsp;with&nbsp;information&nbsp;described&nbsp;above</tt></dd></dl>
+ <dl><dt><a name="-get_device_interfaces_information"><strong>get_device_interfaces_information</strong></a>(device_ip, user_password, user<font color="#909090">=None</font>)</dt><dd><tt>Function&nbsp;to&nbsp;retrieve&nbsp;information&nbsp;about&nbsp;all&nbsp;the&nbsp;interfaces&nbsp;on&nbsp;a&nbsp;device<br>
+&nbsp;<br>
+Given&nbsp;an&nbsp;IP&nbsp;address&nbsp;using&nbsp;a&nbsp;SSH&nbsp;connection,&nbsp;retrieves&nbsp;all&nbsp;the&nbsp;interfaces&nbsp;and&nbsp;their&nbsp;contained&nbsp;informations<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;device_ip&nbsp;(str):&nbsp;the&nbsp;IP&nbsp;of&nbsp;the&nbsp;device&nbsp;for&nbsp;which&nbsp;to&nbsp;retrieve&nbsp;interfaces'&nbsp;information<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user_password&nbsp;(str):&nbsp;the&nbsp;User&nbsp;password&nbsp;to&nbsp;be&nbsp;used&nbsp;to&nbsp;authenticate&nbsp;on&nbsp;the&nbsp;device<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user&nbsp;(str):&nbsp;the&nbsp;user&nbsp;establishing&nbsp;the&nbsp;connection.&nbsp;Defaults&nbsp;to&nbsp;admin<br>
+Returns:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;interfaces&nbsp;({}):&nbsp;A&nbsp;list&nbsp;of&nbsp;all&nbsp;the&nbsp;interfaces&nbsp;with&nbsp;selected&nbsp;relevent&nbsp;information</tt></dd></dl>
+ <dl><dt><a name="-get_eof_eos_information"><strong>get_eof_eos_information</strong></a>(sn, token<font color="#909090">=None</font>)</dt><dd><tt>Function&nbsp;to&nbsp;retrieve&nbsp;EoL&nbsp;and&nbsp;EoS&nbsp;informations&nbsp;about&nbsp;a&nbsp;device<br>
+&nbsp;<br>
+Given&nbsp;the&nbsp;id&nbsp;of&nbsp;a&nbsp;Serial&nbsp;Number&nbsp;of&nbsp;a&nbsp;module,&nbsp;returns&nbsp;The&nbsp;EoL&nbsp;and&nbsp;EoS&nbsp;from&nbsp;apiconsole.cisco.com<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;sn&nbsp;(str):&nbsp;The&nbsp;serial&nbsp;number&nbsp;of&nbsp;the&nbsp;module<br>
+&nbsp;&nbsp;&nbsp;&nbsp;token&nbsp;(str):&nbsp;The&nbsp;Authentication&nbsp;token&nbsp;for<br>
+Returns:</tt></dd></dl>
  <dl><dt><a name="-list_reachable_ips"><strong>list_reachable_ips</strong></a>(start_ip_bytes, nbr_host)</dt><dd><tt>Function&nbsp;to&nbsp;list&nbsp;reachable&nbsp;IPs<br>
 &nbsp;<br>
 Returns&nbsp;all&nbsp;reachable&nbsp;IPs&nbsp;starting&nbsp;from&nbsp;the&nbsp;`start_ip`&nbsp;and&nbsp;incrementally&nbsp;with&nbsp;respect&nbsp;to&nbsp;`nbr_host`<br>
 &nbsp;<br>
 Args:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;start_ip_bytes&nbsp;([]str)&nbsp;:&nbsp;the&nbsp;first&nbsp;IP&nbsp;address&nbsp;in&nbsp;the&nbsp;given&nbsp;range<br>
-&nbsp;&nbsp;&nbsp;&nbsp;nbr_host&nbsp;([]str):&nbsp;The&nbsp;number&nbsp;of&nbsp;hosts&nbsp;in&nbsp;the&nbsp;range<br>
+&nbsp;&nbsp;&nbsp;&nbsp;start_ip_bytes&nbsp;([])&nbsp;:&nbsp;the&nbsp;first&nbsp;IP&nbsp;address&nbsp;in&nbsp;the&nbsp;given&nbsp;range<br>
+&nbsp;&nbsp;&nbsp;&nbsp;nbr_host&nbsp;([]):&nbsp;The&nbsp;number&nbsp;of&nbsp;hosts&nbsp;in&nbsp;the&nbsp;range<br>
 &nbsp;<br>
 Returns:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;ip_list:&nbsp;The&nbsp;list&nbsp;of&nbsp;all&nbsp;reachable&nbsp;ips</tt></dd></dl>
- <dl><dt><a name="-load_configuration"><strong>load_configuration</strong></a>()</dt><dd><tt>Loads&nbsp;ranges&nbsp;and&nbsp;passwords&nbsp;configurations&nbsp;as&nbsp;provided&nbsp;by&nbsp;the&nbsp;user&nbsp;using&nbsp;CLI&nbsp;flags&nbsp;or<br>
+ <dl><dt><a name="-load_configuration"><strong>load_configuration</strong></a>()</dt><dd><tt>Function&nbsp;to&nbsp;load&nbsp;the&nbsp;arguments&nbsp;from&nbsp;the&nbsp;CLI<br>
+&nbsp;<br>
+Loads&nbsp;ranges&nbsp;and&nbsp;passwords&nbsp;configurations&nbsp;as&nbsp;provided&nbsp;by&nbsp;the&nbsp;user&nbsp;using&nbsp;CLI&nbsp;flags&nbsp;or<br>
 tries&nbsp;to&nbsp;use&nbsp;the&nbsp;sample&nbsp;ones&nbsp;from&nbsp;the&nbsp;script&nbsp;directory<br>
 &nbsp;<br>
 Returns:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;return_passwords&nbsp;([]str):&nbsp;A&nbsp;list&nbsp;of&nbsp;candidate&nbsp;passwords&nbsp;from&nbsp;the&nbsp;user&nbsp;defined&nbsp;file<br>
+&nbsp;&nbsp;&nbsp;&nbsp;return_passwords&nbsp;([]):&nbsp;A&nbsp;list&nbsp;of&nbsp;candidate&nbsp;passwords&nbsp;from&nbsp;the&nbsp;user&nbsp;defined&nbsp;file<br>
 &nbsp;&nbsp;&nbsp;&nbsp;return_password&nbsp;(str):&nbsp;Is&nbsp;set&nbsp;in&nbsp;case&nbsp;the&nbsp;password&nbsp;was&nbsp;entered&nbsp;from&nbsp;the&nbsp;CLI<br>
-&nbsp;&nbsp;&nbsp;&nbsp;return_ranges&nbsp;([]str):&nbsp;A&nbsp;list&nbsp;of&nbsp;candidate&nbsp;network&nbsp;IP&nbsp;ranges&nbsp;form&nbsp;a&nbsp;user&nbsp;provided&nbsp;file</tt></dd></dl>
+&nbsp;&nbsp;&nbsp;&nbsp;return_ranges&nbsp;([]):&nbsp;A&nbsp;list&nbsp;of&nbsp;candidate&nbsp;network&nbsp;IP&nbsp;ranges&nbsp;form&nbsp;a&nbsp;user&nbsp;provided&nbsp;file</tt></dd></dl>
+ <dl><dt><a name="-resultCollectionMethod"><strong>resultCollectionMethod</strong></a>(data, option<font color="#909090">=&lt;module 'json' from '/usr/local/Cellar/python/2....rk/Versions/2.7/lib/python2.7/json/__init__.pyc'&gt;</font>)</dt></dl>
+ <dl><dt><a name="-set_password"><strong>set_password</strong></a>(tes_ip, list_of_passwords, validated_password<font color="#909090">=None</font>)</dt></dl>
+ <dl><dt><a name="-ssh_session_connector"><strong>ssh_session_connector</strong></a>(remote_ip, user_password, username<font color="#909090">=None</font>)</dt><dd><tt>"Establishes&nbsp;an&nbsp;SSH&nbsp;Connection<br>
+&nbsp;<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;remote_ip&nbsp;(str):&nbsp;the&nbsp;IP&nbsp;of&nbsp;the&nbsp;remote&nbsp;SSH&nbsp;client&nbsp;to&nbsp;connect&nbsp;to<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user_password&nbsp;(str):&nbsp;a&nbsp;password&nbsp;to&nbsp;be&nbsp;used&nbsp;for&nbsp;connection&nbsp;to&nbsp;the&nbsp;selected&nbsp;host&nbsp;passed&nbsp;as&nbsp;`ip`<br>
+&nbsp;&nbsp;&nbsp;&nbsp;username&nbsp;(str):&nbsp;an&nbsp;optional&nbsp;attribute,&nbsp;username&nbsp;which&nbsp;if&nbsp;not&nbsp;provided&nbsp;defaults&nbsp;in&nbsp;admin<br>
+Returns:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ssh_client&nbsp;(paramiko.SSHClient()):&nbsp;A&nbsp;ssh&nbsp;Client&nbsp;with&nbsp;a&nbsp;connection&nbsp;ready&nbsp;to&nbsp;execute&nbsp;commands<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ssh_connection_status&nbsp;(str):</tt></dd></dl>
+ <dl><dt><a name="-ssh_session_executor"><strong>ssh_session_executor</strong></a>(remote_ip, user_password, command_list, user<font color="#909090">=None</font>)</dt><dd><tt>Given&nbsp;a&nbsp;list&nbsp;of&nbsp;commands&nbsp;and&nbsp;client&nbsp;authentication&nbsp;data,&nbsp;executes&nbsp;and&nbsp;retrieves&nbsp;the&nbsp;result&nbsp;of&nbsp;these&nbsp;commands<br>
+using&nbsp;a&nbsp;SSH&nbsp;connection<br>
+&nbsp;<br>
+Args:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;remote_ip&nbsp;(str):&nbsp;A&nbsp;IP&nbsp;of&nbsp;the&nbsp;remote&nbsp;SSH&nbsp;Client<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user_password&nbsp;(str):&nbsp;Password&nbsp;for&nbsp;the&nbsp;admin&nbsp;user<br>
+&nbsp;&nbsp;&nbsp;&nbsp;command_list&nbsp;([]):&nbsp;a&nbsp;list&nbsp;of&nbsp;commands&nbsp;to&nbsp;be&nbsp;executed&nbsp;within&nbsp;one&nbsp;ssh&nbsp;connection<br>
+&nbsp;&nbsp;&nbsp;&nbsp;user&nbsp;(str):&nbsp;a&nbsp;user&nbsp;responsible&nbsp;to&nbsp;establish&nbsp;the&nbsp;SSH&nbsp;connection<br>
+Returns:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ssh_connection_results&nbsp;({}):&nbsp;The&nbsp;result&nbsp;of&nbsp;the&nbsp;ssh&nbsp;command&nbsp;list<br>
+&nbsp;&nbsp;&nbsp;&nbsp;ssh_stderr&nbsp;(str):&nbsp;A&nbsp;connection&nbsp;error&nbsp;string</tt></dd></dl>
 </td></tr></table><p>
 <table width="100%" cellspacing=0 cellpadding=2 border=0 summary="section">
 <tr bgcolor="#55aa55">
@@ -129,8 +196,11 @@ Returns:<br>
 <tr><td bgcolor="#55aa55"><tt>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</tt></td><td>&nbsp;</td>
 <td width="100%"><strong>Fore</strong> = &lt;colorama.ansi.AnsiFore object&gt;<br>
 <strong>Style</strong> = &lt;colorama.ansi.AnsiStyle object&gt;<br>
-<strong>devices_data</strong> = []<br>
-<strong>oid_of_interests</strong> = ['.1.3.6.1.2.1.1', '1.3.6.1.4.1.9.2.1.3', '1.3.6.1.2.1.14.1.1', '1.3.6.1.2.1.14.10.1.1', '1.3.6.1.2.1.14.10.1.3', '1.3.6.1.2.1.14.10.1.2']<br>
+<strong>cisco_access_token</strong> = ''<br>
+<strong>cisco_password</strong> = ''<br>
+<strong>cisco_user</strong> = ''<br>
+<strong>devices_data</strong> = {}<br>
+<strong>oid_of_interests</strong> = '1.3.6.1.2.1.1.1.0'<br>
 <strong>password</strong> = ''<br>
 <strong>passwords</strong> = []<br>
 <strong>ranges</strong> = []<br>
