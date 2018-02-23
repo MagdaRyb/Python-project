@@ -98,6 +98,10 @@ oid_of_interests = '1.3.6.1.2.1.1.1.0'
 """str: Cisco Cliend Access Token"""
 cisco_access_token = ''
 
+"""str: Cisco Access Token Type"""
+access_type = 'Bearer'
+
+
 def check_snmp_support(ip_address, community_string, list_oid_of_interests):
     """ Function to check SNMP support
 
@@ -351,7 +355,7 @@ def ssh_session_executor(remote_ip, user_password, command_list, user=None):
     return ssh_connection_results, ssh_stderr
 
 
-def get_device_information(device_ip, user_password,  user=None, token=None):
+def get_device_information(device_ip, user_password,  user=None, token=None, t_access_type=None):
     """Function which extracts the information about a device provided the `ip`.
 
     Before using make sure that SSH is enabled on the device.
@@ -366,6 +370,7 @@ def get_device_information(device_ip, user_password,  user=None, token=None):
         device_ip (str): the IP of the device for which we want to perform the SSH Extraction
         user (str): the user to establish SSH connection
         token (str): a cisco Client_Access_Token
+        t_access_type (str): Cisco token Access type
     Returns:
         device ({}): dictionary with information described above
     """
@@ -397,7 +402,8 @@ def get_device_information(device_ip, user_password,  user=None, token=None):
             if module_sn and last_module_name:
                 sn = module_sn.group(0)[4:-1]
                 modules[last_module_name].update({"SN": sn})
-                modules[last_module_name].update(get_eof_eos_information(sn, token=token))
+                modules[last_module_name].update(get_eof_eos_information(sn, token=token,
+                                                                         token_access_type=t_access_type))
                 last_module_name = ''
             elif module_sn is None and last_module_name:
                 modules[last_module_name].update({"SN": None})
@@ -549,47 +555,40 @@ def get_cisco_console_api_token(user, user_password):
     """
     try:
         import requests
-        import StringIO
         url = 'https://cloudsso.cisco.com/as/token.oauth2?grant_type=client_credentials'
-        headers = {'Content-Type': 'application/json', 'Accept-Charset': 'UTF-8'}
-        result_buffer = StringIO.StringIO()
-        r = requests.post(url, auth=(user, user_password), data=result_buffer, headers=headers)
+        r = requests.post(url, auth=(user, user_password))
+        token_data = r.json()
         if r.status_code != 200:
-            print "Failed to retrieve EoL/EoS information", result_buffer.getvalue()
-            return None
-        token_data = r.text
+            print "Failed to retrieve EoL/EoS information", token_data
+            return None, None
         print token_data
         r.close()
-        result_buffer.close()
-        access_token_pattern = re.compile('(\"access_token\":\"\w+(?:|[\=\_])\"\,)')
         if token_data:
-            rt_token = access_token_pattern.search(token_data)
-            if rt_token:
-                return rt_token.group(0)[16:-2]
-            else:
-             return None
-            return token_data
+            return str(token_data['access_token']), str(token_data['token_type'])
         else:
-            return None
+            return None, None
     except (ImportError, requests.exceptions, Exception) as ire:
         if isinstance(ire, ImportError):
             print 'Please Consider getting these modules: [requests, StringIO]'
         print 'Cauth Exception: ', ire
-        return None
+        return None, None
 
 
-def get_eof_eos_information(sn, token=None):
+def get_eof_eos_information(sn, token=None, token_access_type=None):
     """Function to retrieve EoL and EoS informations about a device
 
     Given the id of a Serial Number of a module, returns The EoL and EoS from apiconsole.cisco.com
     Args:
         sn (str): The serial number of the module
         token (str): The Authentication token for
+        access_type (str): The type of the token
     Returns:
 
     """
     if token is None:
         return {'end_of_life_or_end_of_service':  None}
+    if token_access_type is None:
+        token_access_type = 'Bearer'
     print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------'
     print Fore.BLUE + Style.BRIGHT + "                   Collecting EoL/EoS Informations "
     print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
@@ -602,7 +601,8 @@ def get_eof_eos_information(sn, token=None):
     try:
         url = 'https://api.cisco.com/supporttools/eox/rest/5/EOXBySerialNumber/1/'+sn
 
-        headers = {'Content-Type': 'application/json', 'Accept-Charset': 'UTF-8', 'Authorization': 'Bearer '+token}
+        headers = {'Content-Type': 'application/json', 'Accept-Charset': 'UTF-8',
+                   'Authorization': token_access_type + '' + token}
         results_buffer = StringIO.StringIO()
         r = requests.get(url, data=results_buffer, headers=headers)
         if r.status_code != 200:
@@ -634,9 +634,9 @@ if __name__ == '__main__':
             device_interface = {}
             password = set_password(reached_ip, passwords, password)
             if not cisco_access_token:
-                cisco_access_token = get_cisco_console_api_token(cisco_user, cisco_password)
+                cisco_access_token, access_type = get_cisco_console_api_token(cisco_user, cisco_password)
             device_data["device_hardware_os_information"] = \
-                get_device_information(reached_ip, password, token=cisco_access_token)
+                get_device_information(reached_ip, password, token=cisco_access_token, t_access_type=access_type)
             devices_data[reached_ip] = device_data
             device_interface["device_interfaces_information"] = get_device_interfaces_information(reached_ip, password)
             devices_data[reached_ip].update(device_interface)
