@@ -190,20 +190,21 @@ def check_iprange_and_retrieve_available_ips(list_of_ranges):
     """
     reachable_ips = []
     for ip_range in list_of_ranges:
-        ip_bytes = ip_range.split('.')
-        hosts_ranges = ip_bytes[3].split("#")
-        ip_bytes[3] = hosts_ranges[0]
+        ip_bytes = ip_range.rstrip().split('.')
+        if len(ip_bytes) > 3:
+            hosts_ranges = ip_bytes[3].split("#")
+            ip_bytes[3] = hosts_ranges[0]
 
-        if (len(ip_bytes) == 4) and (1 <= int(ip_bytes[0]) <= 223) and (int(ip_bytes[0]) != 127) and (
-                int(ip_bytes[0]) != 169 or int(ip_bytes[1]) != 254) and (
-                0 <= int(ip_bytes[1]) <= 255 and 0 <= int(ip_bytes[2]) <= 255 and 0 <= int(ip_bytes[3]) <= 255) and (
-                int(hosts_ranges[1]) + int(hosts_ranges[0]) <= 254):
-            print Fore.BLUE + Style.BRIGHT + '\n* Found a valid IP range:', ip_range
-            print Fore.BLUE + Style.BRIGHT + '\n* Retrieving the list of available hosts'
-            reachable_ips.extend(list_reachable_ips(ip_bytes, hosts_ranges[1]))
-        else:
-            print Fore.GREEN + Style.BRIGHT + '\n* Found an non valid range: %s ' % ip_range
-            print Fore.GREEN + Style.BRIGHT + '. Skipping...\n'
+            if (len(ip_bytes) == 4) and (1 <= int(ip_bytes[0]) <= 223) and (int(ip_bytes[0]) != 127) and (
+                    int(ip_bytes[0]) != 169 or int(ip_bytes[1]) != 254) and (
+                    0 <= int(ip_bytes[1]) <= 255 and 0 <= int(ip_bytes[2]) <= 255 and 0 <= int(ip_bytes[3]) <= 255) and (
+                    int(hosts_ranges[1]) + int(hosts_ranges[0]) <= 254):
+                print Fore.BLUE + Style.BRIGHT + '\n* Found a valid IP range:', ip_range
+                print Fore.BLUE + Style.BRIGHT + '\n* Retrieving the list of available hosts'
+                reachable_ips.extend(list_reachable_ips(ip_bytes, hosts_ranges[1]))
+            else:
+                print Fore.GREEN + Style.BRIGHT + '\n* Found an non valid range: %s ' % ip_range
+                print Fore.GREEN + Style.BRIGHT + '. Skipping...\n'
     return reachable_ips
 
 
@@ -328,7 +329,7 @@ def load_configuration():
     except IOError as ioe:
         print ioe
     return return_passwords, return_one_password,  return_ranges, \
-        args.token_arg, args.cisco_arg, return_cisco_password, return_ssh_user, return_report_name, return_topology_path
+        args.token_arg, args.cisco_arg, return_cisco_password, return_ssh_user, return_report_name, return_topology_path, False
 
 
 def ssh_session_connector(remote_ip,  user_password, username=None):
@@ -360,7 +361,7 @@ def ssh_session_connector(remote_ip,  user_password, username=None):
         print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
         ssh_connection_status = True
     except (paramiko.ssh_exception.AuthenticationException,
-            paramiko.ssh_exception, socket.timeout, paramiko.ssh_exception.NoValidConnectionsError) as e:
+            paramiko.ssh_exception, socket.timeout, socket.error) as e:
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
         print Fore.RED + Style.BRIGHT + 'SSH: Could not connect to: ', remote_ip, '\n', e
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
@@ -402,8 +403,8 @@ def ssh_session_executor(remote_ip, user_password, command_list, user=None):
             ssh_client.close()
     except (paramiko.ssh_exception, Exception, paramiko.ssh_exception.AuthenticationException) as pe:
         print pe
-        return None, None
-    return ssh_connection_results, ssh_stderr
+        return None, 1
+    return ssh_connection_results, None
 
 
 def get_device_information(device_ip, user_password,  user=None, token=None, t_access_type=None):
@@ -433,7 +434,7 @@ def get_device_information(device_ip, user_password,  user=None, token=None, t_a
     commands = ['show inventory', 'show hardware', 'show running-config | include hostname']
     # retriving all desired information
     stdout, ssh_stderr = ssh_session_executor(device_ip, user_password, commands, user)
-    if ssh_stderr is None or ssh_stderr:
+    if ssh_stderr is not None:
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
         print Fore.RED + Style.BRIGHT + ' SSH (%s): Could not execute all %s on %s:' % (ssh_stderr, commands, device_ip)
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
@@ -474,11 +475,14 @@ def get_device_information(device_ip, user_password,  user=None, token=None, t_a
     show_hostname = stdout['show running-config | include hostname']
     if show_hostname:
         return_hostname = show_hostname.replace('hostname ', '').strip()
+    if user is None:
+        user = 'admin'
     print '-------------------------------------------------------------------------'
     print ' Device Hostname: ', return_hostname
     print ' Management ip address: ', device_ip
     print '        OS information: ', os_info
     print '              Password: ', password
+    print '            Admin User: ', user
     print '  Hardware information: ', hardware_info
     print '   Modules information:'
     for mod in modules:
@@ -487,6 +491,7 @@ def get_device_information(device_ip, user_password,  user=None, token=None, t_a
     return {'ip': device_ip,
             'os_info': os_info,
             'password': password,
+            'user': user,
             'hardware_info': hardware_info,
             'modules_info': modules
             }, return_hostname
@@ -509,7 +514,6 @@ def get_device_interfaces_information(device_ip, user_password, user=None):
             key, value = '', ''
 
             try:
-                print Fore.YELLOW, entry_or_line
                 key, value = entry_or_line.strip().split(" is ")
             except ValueError:
                 try:
@@ -569,13 +573,14 @@ def set_password(tes_ip, list_of_passwords, validated_password=None, user=None):
             pwd = pwd.rstrip('\n\r')
             ssh_client, status = ssh_session_connector(tes_ip, pwd, user)
             if status:
-                print Fore.GREEN + Style.BRIGHT + "Got a valid Password {%s} " % pwd
+                validated_password = pwd
                 ssh_client.close()
                 break
             else:
                 continue
     if not validated_password:
-        raise Exception("Failed to set a valid password")
+        print "Failed to set a valid password for IP: %s" % tes_ip
+        return None
     return validated_password
 
 
@@ -736,8 +741,8 @@ def check_neighborship(device_a_interfaces, device_b_interfaces):
         if ipaddress.IPv4Interface(unicode(ip_a_with_mask)).network == ipaddress.IPv4Interface(unicode(ip_b_with_mask))\
                 .network:
             print Fore.LIGHTMAGENTA_EX + 'INFO: Neighbor interfaces %s and %s' % (ip_a_with_mask, ip_b_with_mask)
-            return True, ip_a_with_mask, ip_b_with_mask
-    return False, None, None
+            return True, ipaddress.IPv4Interface(unicode(ip_a_with_mask)).network
+    return False, ipaddress.IPv4Interface(unicode(ip_a_with_mask)).network
 
 
 def generate_network_topology(all_devices_data):
@@ -765,10 +770,9 @@ def generate_network_topology(all_devices_data):
         grapher.add_node(hostname_b)
         interfaces_a, interfaces_b = all_devices_data[hostname_a]['device_interfaces_information'],\
             all_devices_data[hostname_b]['device_interfaces_information']
-        result, interface_ip_a, interface_ip_b = check_neighborship(interfaces_a, interfaces_a)
+        result, interface_network_ip = check_neighborship(interfaces_a, interfaces_a)
         if result:
-            grapher.add_edge(hostname_a, hostname_b, label=interface_ip_a)
-            grapher.add_edge(hostname_b, hostname_a, label=interface_ip_b)
+            grapher.add_edge(hostname_a, hostname_b, label=interface_network_ip)
 
     pos = nx.spring_layout(grapher)
     nx.draw(grapher, pos, color='g', node_size=1000, with_labels=False)
@@ -805,11 +809,14 @@ def project_main_executor(reached_ips, dev_password, dev_passwords, dev_ssh_user
         device_data["device_hardware_os_information"], device_host_name = \
             get_device_information(reached_ip, dev_password, token=dev_cisco_access_token,
                                    t_access_type=dev_access_type, user=dev_ssh_user)
+        if device_host_name in dev_devices_data:
+            continue
         if device_host_name:
             dev_devices_data[device_host_name] = device_data
             device_interface["device_interfaces_information"] = get_device_interfaces_information(
                 reached_ip, dev_password, user=dev_ssh_user)
             dev_devices_data[device_host_name].update(device_interface)
+            device_host_name = ''
     return dev_devices_data
 
 
@@ -829,12 +836,13 @@ if __name__ == '__main__':
             print Fore.WHITE + Style.BRIGHT + "                    NETWORK DISCOVERY EXECUTION "
             print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
             reachable_ips = check_iprange_and_retrieve_available_ips(ranges)
-            devices_data = project_main_executor(reachable_ips, password, passwords, ssh_user,
+            devices_data = project_main_executor(reachable_ips,  password, passwords, ssh_user,
                                                  cisco_user, cisco_password, cisco_access_token)
-            topology = generate_network_topology(devices_data)
-            topology.savefig(topology_name)
             resultCollectionMethod(devices_data, report_name)
-            topology.show()
+            if devices_data:
+                topology = generate_network_topology(devices_data)
+                topology.savefig(topology_name)
+                topology.show()
     except (KeyboardInterrupt, Exception) as exception_or_key:
         print Fore.BLUE + Style.BRIGHT, exception_or_key
         topology = generate_network_topology(devices_data)
