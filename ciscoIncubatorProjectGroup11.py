@@ -56,19 +56,22 @@ Attributes:
 try:
     import subprocess
     import sys
+    import os
     import argparse
     import getpass
     import paramiko
     import re
     import time
     import json
+    import ipaddress
+    import socket
+    from itertools import product, combinations
     from colorama import init, deinit, Fore, Style
-    # import matplotlib.pyplot as matp
-    import networkx as nx
     from pysnmp.entity.rfc3413.oneliner import cmdgen
+    import ciscoIncubatorgui
 except ImportError as Ie:
     print "Please Make sure to install all the required packages: \n[ subprocess, sys, argparse, getpass, " \
-          "matplotlib, networkx, pysnmp, datetime, re, time, json, colorama ]\n", Ie
+          "matplotlib, networkx, pysnmp, datetime,itertools, re, time, json, colorama ]\n", Ie
     sys.exit()
 
 """str:  The validated password for SNMP. This should hold a valid communityString  """
@@ -77,11 +80,10 @@ password = ''
 """[]:  Stores the list of all candidate passwords. Always retrieved from a text file, else it is be empty"""
 passwords = []
 
+ssh_user = 'admin'
+
 """[]: Accumulator of all provided ranges of IPs, Always retrieved from a text file, else it is be empty """
 ranges = []
-
-"""[]: List of devices which responds to a ping request """
-reachable_ips = []
 
 """[]: Dictionary of all the data retrieved fo a specif device """
 devices_data = {}
@@ -100,6 +102,11 @@ cisco_access_token = ''
 
 """str: Cisco Access Token Type"""
 access_type = 'Bearer'
+
+"""str: Report files names"""
+report_name, topology_name = '', ''
+
+tk = None
 
 
 def check_snmp_support(ip_address, community_string, list_oid_of_interests):
@@ -181,6 +188,7 @@ def check_iprange_and_retrieve_available_ips(list_of_ranges):
     Args:
         list_of_ranges ([]): List of all IP ranges Candidates
     """
+    reachable_ips = []
     for ip_range in list_of_ranges:
         ip_bytes = ip_range.split('.')
         hosts_ranges = ip_bytes[3].split("#")
@@ -193,10 +201,10 @@ def check_iprange_and_retrieve_available_ips(list_of_ranges):
             print Fore.BLUE + Style.BRIGHT + '\n* Found a valid IP range:', ip_range
             print Fore.BLUE + Style.BRIGHT + '\n* Retrieving the list of available hosts'
             reachable_ips.extend(list_reachable_ips(ip_bytes, hosts_ranges[1]))
-
         else:
             print Fore.GREEN + Style.BRIGHT + '\n* Found an non valid range: %s ' % ip_range
             print Fore.GREEN + Style.BRIGHT + '. Skipping...\n'
+    return reachable_ips
 
 
 def load_configuration():
@@ -210,6 +218,7 @@ def load_configuration():
         return_password (str): Is set in case the password was entered from the CLI
         return_ranges ([]): A list of candidate network IP ranges form a user provided file
     """
+
     option_parser = argparse.ArgumentParser(description="Retrieves the network topology, "
                                                         "all its devices and their interfaces information")
 
@@ -223,25 +232,58 @@ def load_configuration():
                                     'If the given value is empty, the program attempts to acquire a password from ' +
                                     'the password.txt file in the directory where projectLauncher.py is located.\n'
                                )
+    option_parser.add_argument('--destination', '-d', dest='report_arg',
+                               help='Passes the report /path/filename, and ${timestamp}_topology.png'
+                                    ' in the current directory\n'
+                               )
+    option_parser.add_argument('--user', '-u', dest='user_arg',
+                               help='Takes a username to use for SSH connection to all the devices in the network\n'
+                               )
     option_parser.add_argument('--token', '-t', dest='token_arg',
                                help='A String token needed for retrieval of EoL/EoS informations '
-                                    'from apiconsole.cisco.com access')
+                                    'from apiconsole.cisco.com access\n')
     option_parser.add_argument('--ciscouser', '-c', dest='cisco_arg',
                                help='if no `token` (--token | -t flag) was provided one '
                                     'can specify a cisco ClientID and then provide'
-                                    ' its attached secret for login')
+                                    ' its attached secret for login\n')
     option_parser.add_argument('--ciscosecret', '-s', dest='secret_arg',
-                               help='The secret for the Cisco ClientID passed by `--ciscouser | -c` flag')
+                               help='The secret for the Cisco ClientID passed by `--ciscouser | -c` flag\n')
     option_parser.add_argument('-f', '--file', dest='from_f',
                                help='Enables to read ranges and passwords values from given files on the CLI.' +
                                     'Should be followed by `--range | -r` or `--password | -p` flags\n')
+    option_parser.add_argument('-g', '--gui', dest='arg_gui',
+                               help='Use this flag to launch the GUI Interface\n')
 
     args = option_parser.parse_args()
+
+    if args.arg_gui:
+        return None, None,  None, \
+        None, None, None, None, None, None, True
+
     return_one_password = ''
     return_passwords = []
     return_ranges = []
     return_cisco_password = ''
+    return_ssh_user = ''
+    return_report_name = ''
+    return_topology_path = ''
 
+    def generate_files_names(user_input):
+        """Function to generate names for the reports files
+
+        Args:
+            user_input (str): A String passed by the user
+        """
+        from time import gmtime, strftime
+        timestamp = re.sub(r"[:\,\s]", '-', strftime("%Y-%m-%d %H:%M:%S", gmtime()))
+        if not user_input:
+            return timestamp + '.json', timestamp + '_topology.png'
+        elif re.search("(.*\/$)", user_input):
+            return user_input + timestamp + '.json', user_input + timestamp + '_topology.png'
+        elif re.search("(^.*.json$)", user_input):
+            return user_input , user_input.replace('.json', '') + '_topology.png'
+        else:
+            return user_input + '.json', user_input + '_topology.png'
     try:
         if args.pwd_arg:
             if args.from_f:
@@ -259,7 +301,6 @@ def load_configuration():
     except (IOError, getpass.GetPassWarning) as ioe:
         print ioe
     try:
-        # Open the range.txt file to load the network ranges
         if args.range_arg:
             if args.from_f:
                 with open(args.range_arg, "r") as ranges_file:
@@ -271,6 +312,14 @@ def load_configuration():
             with open('range.txt', "r") as ranges_file:
                 return_ranges = ranges_file.readlines()
             ranges_file.close()
+        if not args.report_arg:
+            print "Warning: No report path was passed. Hint: use `--destination | -d` to pass the file path"
+        return_report_name, return_topology_path = generate_files_names(args.report_arg)
+
+        if args.user_arg:
+            return_ssh_user = args.user_arg
+        else:
+            return_ssh_user = 'admin'
         if args.cisco_arg:
             if not args.secret_arg:
                 return_cisco_password = getpass.getpass()
@@ -279,7 +328,7 @@ def load_configuration():
     except IOError as ioe:
         print ioe
     return return_passwords, return_one_password,  return_ranges, \
-        args.token_arg, args.cisco_arg, return_cisco_password
+        args.token_arg, args.cisco_arg, return_cisco_password, return_ssh_user, return_report_name, return_topology_path
 
 
 def ssh_session_connector(remote_ip,  user_password, username=None):
@@ -310,7 +359,8 @@ def ssh_session_connector(remote_ip,  user_password, username=None):
         print Fore.GREEN + Style.BRIGHT + 'Connection to: ', remote_ip, ' established'
         print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
         ssh_connection_status = True
-    except (paramiko.ssh_exception.AuthenticationException, paramiko.ssh_exception) as e:
+    except (paramiko.ssh_exception.AuthenticationException,
+            paramiko.ssh_exception, socket.timeout, paramiko.ssh_exception.NoValidConnectionsError) as e:
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
         print Fore.RED + Style.BRIGHT + 'SSH: Could not connect to: ', remote_ip, '\n', e
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
@@ -340,7 +390,7 @@ def ssh_session_executor(remote_ip, user_password, command_list, user=None):
             print Fore.WHITE + Style.BRIGHT + "Executing `%s` ..." % command
             print Fore.WHITE + Style.BRIGHT + '-------------------------------------------------------------------------\n'
             ssh_client, connexion_status = ssh_session_connector(remote_ip, user_password, user)
-            if not connexion_status:
+            if not connexion_status or ssh_client is None:
                 raise Exception("Failed to establish an SSH Connection, while executing `%s`" % command)
             stdin, stdout, ssh_stderr = ssh_client.exec_command(command, timeout=90)
             ssh_connection_results[command] = stdout.read()
@@ -350,8 +400,9 @@ def ssh_session_executor(remote_ip, user_password, command_list, user=None):
             print Fore.BLUE + Style.BRIGHT + "Successfully executed `%s` ..." % command
             print Fore.BLUE + Style.BRIGHT + '-------------------------------------------------------------------------\n'
             ssh_client.close()
-    except (paramiko.ssh_exception, paramiko.ssh_exception.AuthenticationException) as pe:
+    except (paramiko.ssh_exception, Exception, paramiko.ssh_exception.AuthenticationException) as pe:
         print pe
+        return None, None
     return ssh_connection_results, ssh_stderr
 
 
@@ -379,14 +430,14 @@ def get_device_information(device_ip, user_password,  user=None, token=None, t_a
     modules = {}
     os_info = ''
     hardware_info = ''
-    commands = ['show inventory', 'show hardware']
+    commands = ['show inventory', 'show hardware', 'show running-config | include hostname']
     # retriving all desired information
     stdout, ssh_stderr = ssh_session_executor(device_ip, user_password, commands, user)
-    if ssh_stderr:
+    if ssh_stderr is None or ssh_stderr:
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
         print Fore.RED + Style.BRIGHT + ' SSH (%s): Could not execute all %s on %s:' % (ssh_stderr, commands, device_ip)
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------\n'
-
+        return None, None
     show_inventory = stdout['show inventory']
     if show_inventory:
         last_module_name = None
@@ -420,8 +471,11 @@ def get_device_information(device_ip, user_password,  user=None, token=None, t_a
 
         os_type_pattern = re.compile('.*(NX\-OS|IOS|IOS\-XR).*,.*,')
         os_info = os_type_pattern.search(show_hardware).group(0)[:-1]
-
+    show_hostname = stdout['show running-config | include hostname']
+    if show_hostname:
+        return_hostname = show_hostname.replace('hostname ', '').strip()
     print '-------------------------------------------------------------------------'
+    print ' Device Hostname: ', return_hostname
     print ' Management ip address: ', device_ip
     print '        OS information: ', os_info
     print '              Password: ', password
@@ -435,7 +489,7 @@ def get_device_information(device_ip, user_password,  user=None, token=None, t_a
             'password': password,
             'hardware_info': hardware_info,
             'modules_info': modules
-            }
+            }, return_hostname
 
 
 def get_device_interfaces_information(device_ip, user_password, user=None):
@@ -449,12 +503,27 @@ def get_device_interfaces_information(device_ip, user_password, user=None):
     Returns:
         interfaces ({}): A list of all the interfaces with selected relevent information
     """
+
+    def interface_line_processor(tmp_interfaces, entry_or_line, int_name):
+        if entry_or_line:
+            key, value = '', ''
+
+            try:
+                print Fore.YELLOW, entry_or_line
+                key, value = entry_or_line.strip().split(" is ")
+            except ValueError:
+                try:
+                    key, value = entry_or_line.strip().split(" ", 1)
+                except ValueError:
+                    key = True
+            tmp_interfaces[int_name].update({key: value})
+        return tmp_interfaces
+
     interfaces = {}
     interface_name_pattern = re.compile("(^\w+(?:|[/\-\.]\w+) )")
-    iternet_address_pattern = re.compile('(Internet address is \d+\.\d+\.\d+\.\d+\/d+)')
-
     commands = ['show interfaces']
     stdout, ssh_stderr = ssh_session_executor(device_ip, user_password, commands, user)
+
     if ssh_stderr:
         print Fore.RED + Style.BRIGHT + '-------------------------------------------------------------------------'
         print Fore.RED + Style.BRIGHT + ' SSH (%s): Could not execute all %s on %s:' % (ssh_stderr, commands, device_ip)
@@ -462,25 +531,43 @@ def get_device_interfaces_information(device_ip, user_password, user=None):
     show_interfaces = re.compile("(?m)((?:^\w+.*\n)(^\s+\w+.*\n)+)").split(stdout['show interfaces'])
     for interface in show_interfaces:
         interface_name_block = interface_name_pattern.search(interface)
-        address = iternet_address_pattern.search(interface)
         if interface_name_block:
-            interface_name = interface_name_block.group(0)
+            interface_name = interface_name_block.group(0).strip()
             print Fore.WHITE + Style.BRIGHT + '-------------------------------------------------------------------------'
             print Fore.WHITE + Style.BRIGHT + 'Getting Information for: ', interface_name
             print Fore.WHITE + Style.BRIGHT + '-------------------------------------------------------------------------\n'
             print Fore.WHITE + Style.BRIGHT + ' ', interface
-            interfaces[interface_name] = {"interface_informations": interface}
-        if address:
-            interfaces[interface_name.group(0)].update({"interface_address_ip": address.group(0)[20:-3],
-                                              "address_mask": address.group(0)[23:]})
+            interfaces[interface_name] = {}
+            interface_detailed_data = interface.split("\r\n")
+            count = 0
+            for line in interface_detailed_data:
+                if count < 15:
+                    line_entries = line.split(", ")
+                    if line_entries is not None:
+                        for entry in line_entries:
+                            interfaces = interface_line_processor(interfaces, entry, interface_name)
+                    else:
+                        print Fore.GREEN, line
+                        interfaces = interface_line_processor(interfaces, line, interface_name)
+                    count = count + 1
     return interfaces
 
 
-def set_password(tes_ip, list_of_passwords, validated_password=None):
+def set_password(tes_ip, list_of_passwords, validated_password=None, user=None):
+    """Function to set a global password to be used for SSH Connections
+
+    Args:
+        tes_ip (str): IP address to try to connect to
+        list_of_passwords ([]): A List of password candidates
+        validated_password (str): A probable validate Password
+        user (str): the username for SSH Connection
+    Return:
+         validated_password (str): The validated password
+    """
     if validated_password is None or not validated_password:
         for pwd in list_of_passwords:
             pwd = pwd.rstrip('\n\r')
-            ssh_client, status = ssh_session_connector(tes_ip, pwd)
+            ssh_client, status = ssh_session_connector(tes_ip, pwd, user)
             if status:
                 print Fore.GREEN + Style.BRIGHT + "Got a valid Password {%s} " % pwd
                 ssh_client.close()
@@ -492,56 +579,69 @@ def set_password(tes_ip, list_of_passwords, validated_password=None):
     return validated_password
 
 
-def resultCollectionMethod(data, option=json):
+def resultCollectionMethod(data, filename, option=None):
+    """Function to catch the user choice for collecting the results
+
+    Displays or creates a file containing the output of the network discovery
+    Args:
+        data ({}): a json-like string containing the results of the of running the poject
+        filename (str): Path of the report file
+        option (str): If one wants to create a json report by default
+    """
     print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
     print Fore.WHITE + Style.BRIGHT + "                        RESULTS COLLECTION "
     print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
-    print Fore.BLUE + Style.BRIGHT + 'How would you like to collect your logs'
 
-    to_file = json.dumps(data, sort_keys=True, indent=4, separators=(',', ': '))
+    to_file = json.dumps(data, indent=4, separators=(',', ': '))
 
     def print_to_cli():
+        """Function to print to cli
+
+        Prints the results to the command line interface
+        """
         print Fore.CYAN + Style.BRIGHT + '-----------------------------------START-----------------------------------'
         print Fore.CYAN + Style.BRIGHT + to_file
         print Fore.CYAN + Style.BRIGHT + '------------------------------------END------------------------------------'
 
     def return_json_file():
-        print Fore.YELLOW + Style.BRIGHT + 'WARNING: You must have the right to write a file to the given Path'
-        file_path = raw_input("Please enter the file name (with path) --> Leave it empty to use timestamp name : ")
-        if file_path:
-            if re.search("(^.*.json$)", file_path):
-                new_file = open(file_path, 'w')
-            else:
-                new_file = open(file_path + '.json', 'w')
-        else:
-            from time import gmtime, strftime
-            file_path = re.sub(r"[:\,\s]", '-', strftime("%Y-%m-%d %H:%M:%S", gmtime()))
-            new_file = open(file_path + '.json', 'w')
+        """Function to create and return a json file
+
+        Return:
+             A json file containing the results of the network discovery run
+        """
+
+        new_file = open(filename, 'w')
         new_file.write(to_file)
         new_file.close()
 
     def return_html_file():
+        """
+
+        Function planned for returning a HTML response of the results of running the project
+        Return:
+            HTML file as a results
+        """
         print Fore.RED + Style.BRIGHT + 'Not yet Implemented, choose between JSON FILE and PRINT HERE '
         resultCollectionMethod(data)
 
-    def make_git_commit():
-        print Fore.RED + Style.BRIGHT + 'Not yet Implemented, choose between JSON FILE and PRINT HERE '
-        resultCollectionMethod(data)
-
-    options = {3: print_to_cli,
-               1: return_json_file,
-               2: return_html_file,
-               4: make_git_commit,
-               }
-    choice = input(
-        "Enter your Choice (One of the given numbers) \n\t1. 'JSON FILE'"
-        "\n\t2. 'HTML PAGE' \n\t3. 'PRINT HERE'\n\t4. 'GIT COMMIT'\n", )
-    try:
-        if int(choice) not in range(1, 5):
-            raise ValueError
-    except ValueError:
-        print Fore.YELLOW + Style.BRIGHT + 'WARNING: You should have entered a number. Printing the results to CLI'
-    options[choice]()
+    if option is None:
+        print Fore.BLUE + Style.BRIGHT + 'How would you like to collect your logs'
+        options = {1: print_to_cli,
+                   2: return_json_file,
+                   3: return_html_file,
+                   }
+        choice = input(
+            "Enter your Choice (One of the given numbers) \n\t1. 'PRINT HERE'"
+            "\n\t2. 'JSON FILE' \n\t3. 'HTML PAGE'\n" )
+        try:
+            if int(choice) not in range(1, 5):
+                raise ValueError
+        except ValueError:
+            print Fore.YELLOW + Style.BRIGHT + 'WARNING: You should have entered a number. Printing the results to CLI'
+            choice = 1
+        options[choice]()
+    else:
+        return_json_file()
 
 
 def get_cisco_console_api_token(user, user_password):
@@ -619,31 +719,126 @@ def get_eof_eos_information(sn, token=None, token_access_type=None):
     return {'end_of_life_or_end_of_service':  data}
 
 
+def check_neighborship(device_a_interfaces, device_b_interfaces):
+    """Function that uses the information on two devices interface to deternime the topology of the network
+
+    Args:
+        device_a_interfaces ({}): List of interfaces data from one device
+        device_b_interfaces ({}): List of interfaces data from the second device
+    Returns:
+         bool: If both interfaces have an IP address belonging to the same network as the other
+         str: IP of the first interface
+         str: IP of the second interface
+    """
+    for interface_a, interface_b in product(device_a_interfaces, device_b_interfaces):
+        ip_a_with_mask = device_a_interfaces[interface_a]['Internet address']
+        ip_b_with_mask = device_b_interfaces[interface_b]['Internet address']
+        if ipaddress.IPv4Interface(unicode(ip_a_with_mask)).network == ipaddress.IPv4Interface(unicode(ip_b_with_mask))\
+                .network:
+            print Fore.LIGHTMAGENTA_EX + 'INFO: Neighbor interfaces %s and %s' % (ip_a_with_mask, ip_b_with_mask)
+            return True, ip_a_with_mask, ip_b_with_mask
+    return False, None, None
+
+
+def generate_network_topology(all_devices_data):
+    """Function to retrieve and parse entries in a device routing table
+
+    Args:
+        all_devices_data ({}): a dictionary of devices data
+    Return:
+        list_of_ips ([]): List of elements in the routing Table excluding static routes and default ones
+    """
+    try:
+        import matplotlib.pyplot as matp
+        import networkx as nx
+    except ImportError as mne:
+        print "Missing modules to plotting the network topology []", mne
+        print " The topology will be retrieved as a array"
+
+    grapher = nx.DiGraph()
+    labels = {}
+
+    for hostname_a, hostname_b in combinations(all_devices_data, 2):
+        labels[hostname_b] = r'%s' % hostname_b
+        labels[hostname_a] = r'%s' % hostname_a
+        grapher.add_node(hostname_a)
+        grapher.add_node(hostname_b)
+        interfaces_a, interfaces_b = all_devices_data[hostname_a]['device_interfaces_information'],\
+            all_devices_data[hostname_b]['device_interfaces_information']
+        result, interface_ip_a, interface_ip_b = check_neighborship(interfaces_a, interfaces_a)
+        if result:
+            grapher.add_edge(hostname_a, hostname_b, label=interface_ip_a)
+            grapher.add_edge(hostname_b, hostname_a, label=interface_ip_b)
+
+    pos = nx.spring_layout(grapher)
+    nx.draw(grapher, pos, color='g', node_size=1000, with_labels=False)
+    edge_labels = dict([((u, v,), d['label'])
+                        for u, v, d in grapher.edges(data=True)])
+    nx.draw_networkx_edge_labels(grapher, pos, edge_labels=edge_labels, width=1.0, alpha=0.5, label_pos=0.3, font_size=12)
+    nx.draw_networkx_labels(grapher, pos, labels, font_size=16, color='g', font_color='b')
+    matp.axis('off')
+    return matp
+
+
+def project_main_executor(reached_ips, dev_password, dev_passwords, dev_ssh_user, dev_cisco_user, dev_cisco_password,
+                          dev_cisco_access_token):
+    """Function to Execute the main goals of this project
+
+    Args:
+        reached_ips ([]): Accumulator of all provided ranges of IPs, Always retrieved from a text file, else it is be empty
+        dev_password (str):
+        dev_passwords (str):
+        dev_ssh_user (str):
+        dev_cisco_user (str):
+        dev_cisco_password (str) :
+        dev_cisco_access_token (str):
+    Returns:
+
+    """
+    dev_devices_data = {}
+    for reached_ip in reached_ips:
+        device_data = {}
+        device_interface = {}
+        dev_password = set_password(reached_ip, dev_passwords, dev_password, user=dev_ssh_user)
+        if not dev_cisco_access_token:
+            dev_cisco_access_token, dev_access_type = get_cisco_console_api_token(dev_cisco_user, dev_cisco_password)
+        device_data["device_hardware_os_information"], device_host_name = \
+            get_device_information(reached_ip, dev_password, token=dev_cisco_access_token,
+                                   t_access_type=dev_access_type, user=dev_ssh_user)
+        if device_host_name:
+            dev_devices_data[device_host_name] = device_data
+            device_interface["device_interfaces_information"] = get_device_interfaces_information(
+                reached_ip, dev_password, user=dev_ssh_user)
+            dev_devices_data[device_host_name].update(device_interface)
+    return dev_devices_data
+
+
 if __name__ == '__main__':
     init()
-
     try:
-        print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
-        print Fore.WHITE + Style.BRIGHT + "                    NETWORK DISCOVERY EXECUTION "
-        print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
         passwords, password, ranges, cisco_access_token,\
-            cisco_user, cisco_password = load_configuration()
-        check_iprange_and_retrieve_available_ips(ranges)
-        for reached_ip in reachable_ips:
-            device_data = {}
-            device_interface = {}
-            password = set_password(reached_ip, passwords, password)
-            if not cisco_access_token:
-                cisco_access_token, access_type = get_cisco_console_api_token(cisco_user, cisco_password)
-            device_data["device_hardware_os_information"] = \
-                get_device_information(reached_ip, password, token=cisco_access_token, t_access_type=access_type)
-            devices_data[reached_ip] = device_data
-            device_interface["device_interfaces_information"] = get_device_interfaces_information(reached_ip, password)
-            devices_data[reached_ip].update(device_interface)
-        resultCollectionMethod(devices_data)
+            cisco_user, cisco_password, ssh_user, report_name, topology_name, use_gui = load_configuration()
+
+        if use_gui:
+            print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
+            print Fore.WHITE + Style.BRIGHT + "                    LOADING THE GRAPHICAL INTERFACE "
+            print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
+            ciscoIncubatorgui.gui()
+        else:
+            print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------'
+            print Fore.WHITE + Style.BRIGHT + "                    NETWORK DISCOVERY EXECUTION "
+            print Fore.GREEN + Style.BRIGHT + '-------------------------------------------------------------------------\n\n'
+            reachable_ips = check_iprange_and_retrieve_available_ips(ranges)
+            devices_data = project_main_executor(reachable_ips, password, passwords, ssh_user,
+                                                 cisco_user, cisco_password, cisco_access_token)
+            topology = generate_network_topology(devices_data)
+            topology.savefig(topology_name)
+            resultCollectionMethod(devices_data, report_name)
+            topology.show()
     except (KeyboardInterrupt, Exception) as exception_or_key:
         print Fore.BLUE + Style.BRIGHT, exception_or_key
-        resultCollectionMethod(devices_data)
-        sys.exit()
-
+        topology = generate_network_topology(devices_data)
+        topology.savefig(topology_name)
+        resultCollectionMethod(devices_data, report_name)
+        sys.exit(1)
     deinit()
